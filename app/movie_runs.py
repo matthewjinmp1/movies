@@ -217,8 +217,14 @@ def parse_score(text):
     text = text.strip()
     if text.startswith('```'):
         text = re.sub(r'^```(?:json)?\s*|\s*```$', '', text)
-    payload = json.loads(text)
-    score = payload.get('score') if isinstance(payload, dict) else payload
+    try:
+        payload = json.loads(text)
+        score = payload.get('score') if isinstance(payload, dict) else payload
+    except json.JSONDecodeError:
+        match = re.search(r'(?<![\w.+-])([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*[.!]?$', text)
+        if not match:
+            raise ValueError('Response must end with a numeric score from 0 to 100.') from None
+        score = float(match.group(1))
     if type(score) not in (int, float) or not math.isfinite(score) or not 0 <= score <= 100:
         raise ValueError('Response must contain a numeric score from 0 to 100.')
     return float(score)

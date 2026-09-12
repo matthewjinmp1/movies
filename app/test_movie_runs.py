@@ -100,8 +100,10 @@ class MovieRunTests(unittest.TestCase):
 
     def test_score_and_preview_validation(self):
         self.assertEqual(runs.parse_score('```json\n{"score":70}\n```'),70)
-        for value in ['{"score":null}','{"score":true}','{"score":101}','{"score":NaN}','Some text 95']:
+        for value in ['{"score":null}','{"score":true}','{"score":101}','{"score":NaN}','Some text 95 then more text','score: -1','score: 101','score: 1e999']:
             with self.assertRaises(ValueError): runs.parse_score(value)
+        for text, expected in [('Some text 95',95), ('Misery (1990), rating 7.8.\n\nscore: 88',88), ('Score: 87.5. ',87.5), ('88',88), ('score: 0',0), ('score: 100',100)]:
+            self.assertEqual(runs.parse_score(text),expected)
         p=self.selection()
         for field,value in [('count',3),('workers',0),('max_tokens',0),('prompt','')]:
             with self.assertRaises(ValueError): runs.preview(dict(p,**{field:value}))
