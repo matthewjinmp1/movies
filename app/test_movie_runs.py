@@ -22,6 +22,13 @@ class MovieRunTests(unittest.TestCase):
         return {'name':'Suspense','prompt':'Rate {{MOVIE}} from {{YEAR}}','list_id':saved['id'],
                 'count':2,'workers':2,'max_tokens':1000}
 
+    def test_movie_placeholder_includes_year(self):
+        movie = {'primaryTitle':'Inception', 'startYear':2010, 'tconst':'tt1375666'}
+        prompt = runs.rendered_prompt('Rate {{MOVIE}}; year {{YEAR}}; id {{IMDB_ID}}.', movie)
+        self.assertTrue(prompt.startswith('Rate Inception (2010); year 2010; id tt1375666.'))
+        movie['startYear'] = None
+        self.assertTrue(runs.rendered_prompt('Rate {{MOVIE}}.', movie).startswith('Rate Inception.'))
+
     def test_snapshot_and_list_edit(self):
         p = self.selection()
         run_id = runs.create(p, launch=False)

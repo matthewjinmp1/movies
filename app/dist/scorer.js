@@ -8,8 +8,8 @@
  <p id="ai-status" role="status"></p>
  <section data-score-section="setup"><form id="ai-run-form" class="ai-card">
  <h2>Set run</h2><div class="ai-grid"><label>Run name<input id="ai-name" maxlength="120" required placeholder="Weekend thrillers"></label><label>Movie list<select id="ai-list" required></select></label></div>
- <label>Scoring prompt<textarea id="ai-prompt" rows="6" maxlength="20000" required placeholder="Score how well {{MOVIE}} ({{YEAR}}) fits an atmospheric, suspenseful movie night with clever twists and little gore."></textarea></label>
- <p class="muted">Use {{MOVIE}}, {{YEAR}}, and {{IMDB_ID}}. Each request also includes the movie’s IMDb metadata. Scores are 0–100 with an explanation. The model has no live web search.</p>
+ <label>Scoring prompt<textarea id="ai-prompt" rows="6" maxlength="20000" required placeholder="Score how well {{MOVIE}} fits an atmospheric, suspenseful movie night with clever twists and little gore."></textarea></label>
+ <p class="muted">Use {{MOVIE}} for the title and year, e.g. Inception (2010). {{IMDB_ID}} is also available; {{YEAR}} remains supported for existing prompts. Each request also includes the movie’s IMDb metadata. Scores are 0–100 with an explanation. The model has no live web search.</p>
  <div class="ai-grid"><label>Movies to score<input id="ai-count" type="number" min="1" max="10000" value="1" required></label><label>Response token limit<input id="ai-tokens" type="number" min="100" max="16000" value="2000" required></label><label>Concurrent requests<input id="ai-workers" type="number" min="1" max="20" value="4" required></label></div>
  <p class="muted">Model: DeepSeek V4 Flash · deepseek/deepseek-v4-flash-0731 · reasoning disabled</p>
  <div class="ai-actions"><button type="submit">Preview run</button><button type="button" id="ai-save-prompt">Save prompt draft</button></div>
