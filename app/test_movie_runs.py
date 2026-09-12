@@ -19,7 +19,7 @@ class MovieRunTests(unittest.TestCase):
 
     def selection(self):
         saved = runs.save_list({'name':'Test movies','ids':['tt1375666','tt0111161','tt1375666']})
-        return {'name':'Suspense','prompt':'Rate {{MOVIE}} from {{YEAR}}','list_id':saved['id'],
+        return {'name':'Suspense','prompt':'Rate MOVIE','list_id':saved['id'],
                 'count':2,'workers':2,'max_tokens':1000}
 
     def test_movie_placeholder_includes_year(self):
@@ -28,6 +28,14 @@ class MovieRunTests(unittest.TestCase):
         self.assertTrue(prompt.startswith('Rate Inception (2010); year 2010; id tt1375666.'))
         movie['startYear'] = None
         self.assertTrue(runs.rendered_prompt('Rate {{MOVIE}}.', movie).startswith('Rate Inception.'))
+
+    def test_plain_movie_keyword(self):
+        movie = {'primaryTitle':'The MOVIE {{YEAR}}', 'startYear':2010, 'tconst':'tt123'}
+        prompt = runs.rendered_prompt('Rate MOVIE. MOVIE/MOVIES movie {{MOVIE}}', movie)
+        self.assertEqual(prompt.split('\n\n')[0],
+                         'Rate The MOVIE {{YEAR}} (2010). The MOVIE {{YEAR}} (2010)/MOVIES movie The MOVIE {{YEAR}} (2010)')
+        movie['startYear'] = None
+        self.assertTrue(runs.rendered_prompt('Rate MOVIE.', movie).startswith('Rate The MOVIE {{YEAR}}.'))
 
     def test_snapshot_and_list_edit(self):
         p = self.selection()
