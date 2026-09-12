@@ -7,6 +7,7 @@ const chatInput = document.querySelector('#chat-input');
 const chatSend = document.querySelector('#chat-send');
 const chatStatus = document.querySelector('#chat-status');
 const chatHistory = [];
+let chatError = '';
 
 // The app shell is intentionally compact HTML; move the chat panel to the main
 // content area so it is a sibling of the movie panel before tab switching.
@@ -33,7 +34,7 @@ function renderChat() {
     chatMessagesElement.innerHTML = '<div class="chat-empty">Ask anything about movies, or start with a recommendation question.</div>';
     return;
   }
-  chatMessagesElement.innerHTML = chatHistory.map(message => `<div class="chat-message ${message.role}"><span class="chat-role">${message.role === 'user' ? 'You' : 'DeepSeek'}</span><div>${chatEscape(message.content)}</div></div>`).join('');
+  chatMessagesElement.innerHTML = chatHistory.map(message => `<div class="chat-message ${message.role}"><span class="chat-role">${message.role === 'user' ? 'You' : 'DeepSeek'}</span><div>${chatEscape(message.content)}</div></div>`).join('') + (chatError ? `<div class="chat-message chat-error"><span class="chat-role">Chat error</span><div>${chatEscape(chatError)}</div><button type="button" id="chat-retry">Try again</button></div>` : '');
   chatMessagesElement.lastElementChild?.scrollIntoView({block: 'nearest'});
 }
 
@@ -45,6 +46,7 @@ chatForm?.addEventListener('submit', async event => {
   const content = chatInput.value.trim();
   if (!content || chatSend.disabled) return;
   chatHistory.push({role: 'user', content});
+  chatError = '';
   renderChat();
   chatInput.value = '';
   chatSend.disabled = true;
@@ -61,11 +63,24 @@ chatForm?.addEventListener('submit', async event => {
     renderChat();
     chatStatus.textContent = '';
   } catch (error) {
-    chatStatus.textContent = error.message;
+    chatError = error.message;
+    chatStatus.textContent = 'The request did not complete.';
+    renderChat();
   } finally {
     chatSend.disabled = false;
     chatInput.focus();
   }
+});
+
+chatMessagesElement?.addEventListener('click', event => {
+  if (event.target.id !== 'chat-retry') return;
+  chatError = '';
+  const lastUser = [...chatHistory].reverse().find(message => message.role === 'user');
+  if (!lastUser) return;
+  if (chatHistory[chatHistory.length - 1] === lastUser) chatHistory.pop();
+  chatInput.value = lastUser.content;
+  chatInput.focus();
+  chatForm.requestSubmit();
 });
 
 selectTopTab(window.location.hash.slice(1), false);

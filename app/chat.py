@@ -1,6 +1,7 @@
 """Small server-side OpenRouter chat client for the movie browser."""
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -10,6 +11,8 @@ MODEL = 'deepseek/deepseek-v4-flash-0731'
 MAX_MESSAGES = 20
 MAX_MESSAGE_CHARS = 8000
 MAX_RESPONSE_TOKENS = 2000
+MAX_ATTEMPTS = 3
+RETRYABLE_HTTP_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
 ROOT = Path(__file__).resolve().parent
 
 
@@ -84,17 +87,25 @@ def complete(messages):
         'HTTP-Referer': 'http://localhost:3002',
         'X-Title': 'Frame Movie Library',
     })
-    try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            body = response.read()
-            result = json.loads(body.decode('utf-8'))
-    except urllib.error.HTTPError as error:
+    last_error = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            details = json.loads(error.read().decode('utf-8'))
-            message = details.get('error', {}).get('message') if isinstance(details, dict) else None
-        except (ValueError, UnicodeDecodeError):
-            message = None
-        raise RuntimeError(message or f'OpenRouter request failed (HTTP {error.code}).') from error
-    except (urllib.error.URLError, TimeoutError) as error:
-        raise RuntimeError(f'Could not reach OpenRouter: {error.reason if hasattr(error, "reason") else error}') from error
-    return response_text(result)
+            with urllib.request.urlopen(request, timeout=90) as response:
+                body = response.read()
+                result = json.loads(body.decode('utf-8'))
+            return response_text(result)
+        except urllib.error.HTTPError as error:
+            last_error = error
+            try:
+                details = json.loads(error.read().decode('utf-8'))
+                message = details.get('error', {}).get('message') if isinstance(details, dict) else None
+            except (ValueError, UnicodeDecodeError):
+                message = None
+            if error.code not in RETRYABLE_HTTP_STATUS or attempt == MAX_ATTEMPTS:
+                raise RuntimeError(message or f'OpenRouter request failed (HTTP {error.code}).') from error
+        except (urllib.error.URLError, TimeoutError) as error:
+            last_error = error
+            if attempt == MAX_ATTEMPTS:
+                raise RuntimeError(f'Could not reach OpenRouter: {error.reason if hasattr(error, "reason") else error}') from error
+        time.sleep(attempt * 1.5)
+    raise RuntimeError(f'OpenRouter request failed: {last_error}')
