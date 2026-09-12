@@ -52,6 +52,7 @@ The launcher always uses port 3002. To run the server on another port, use `pyth
 The app joins all 756,513 movie records with ratings by IMDb ID, including 348,202 movies with ratings. It preserves unrated movies and keeps the original downloaded files unchanged.
 
 - Use Columns to toggle any of the 11 source fields. At least one remains visible.
+- In Columns, use the left/right arrows next to a visible column to change its table position. The menu lists visible columns in table order, and the order is saved in this browser. Reset restores the default columns and order.
 - Click any column header or choose a field in Sort to sort ascending or descending. Missing values always sort last.
 - Search by primary title, original title, or IMDb ID.
 - Use Choose filters to show or hide custom controls for genres, IMDb rating, vote count, release year, runtime, and adult content. Hiding a control removes its condition.
