@@ -6,6 +6,7 @@ __pycache__/
 app/filters.json
 app/starred.json
 app/global_scoring.json
+.env
 
 # Downloaded IMDb snapshots and generated exports stay local.
 *.tsv

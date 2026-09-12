@@ -49,6 +49,8 @@ Alternatively, run `python3 app/launch.py`. Use `python3 app/server.py` to start
 The server listens only on this computer. No packages or external services are required.
 The launcher always uses port 3002. To run the server on another port, use `python3 app/server.py --port 3003`.
 
+The Chat tab uses the OpenRouter chat-completions API with `deepseek/deepseek-v4-flash-0731`. Copy `.env.example` to `.env` and set `OPENROUTER_KEY` before starting the app. The key stays on the local server and is never sent to the browser or committed to GitHub. Chat requests may incur OpenRouter charges according to your account.
+
 The app joins all 756,513 movie records with ratings by IMDb ID, including 348,202 movies with ratings. It preserves unrated movies and keeps the original downloaded files unchanged.
 
 - Use Columns to toggle any of the 11 source fields. At least one remains visible.

@@ -13,6 +13,7 @@ import preferences
 import score_settings
 import starred
 import global_scoring
+import chat
 
 ROOT = Path(__file__).resolve().parent
 COLUMNS = [
@@ -119,6 +120,28 @@ def query(params):
     return dict(rows=result,total=total,page=page,pages=pages,size=size,starredCount=len(saved_ids),scoreRules=[dict(label=c['label'],rule=c['rule'],weight=c['weight']) for c in components])
 
 class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if urlsplit(self.path).path != '/api/chat':
+            return self.send_json({'error':'Not found'},404)
+        origin=self.headers.get('Origin')
+        if origin and origin != 'http://' + self.headers.get('Host',''):
+            return self.send_json({'error':'Origin not allowed'},403)
+        if self.headers.get('Content-Type','').split(';')[0] != 'application/json':
+            return self.send_json({'error':'JSON required'},415)
+        try:
+            size=int(self.headers.get('Content-Length','0'))
+            if not 0<size<=200000: raise ValueError('Invalid chat request size.')
+            payload=json.loads(self.rfile.read(size))
+            answer=chat.complete(payload.get('messages') if isinstance(payload,dict) else None)
+            return self.send_json({'model':chat.MODEL,'message':answer})
+        except (ValueError,TypeError,KeyError) as error:
+            return self.send_json({'error':str(error)},400)
+        except RuntimeError as error:
+            return self.send_json({'error':str(error)},502)
+        except Exception:
+            import traceback; traceback.print_exc()
+            return self.send_json({'error':'Could not complete the chat request.'},500)
+
     def do_PUT(self):
         path = urlsplit(self.path).path
         if path not in ('/api/filters','/api/starred','/api/global-scoring'):
@@ -163,7 +186,7 @@ class Handler(BaseHTTPRequestHandler):
                 meta['columns'] = [dict(key=k,label=l,kind=t) for k,l,t in COLUMNS]
                 meta['scoringDefaults']=score_settings.validate()
                 return self.send_json(meta)
-            files = {'/':('index.html','text/html'), '/app.js':('app.js','text/javascript'), '/global.js':('global.js','text/javascript'), '/styles.css':('styles.css','text/css')}
+            files = {'/':('index.html','text/html'), '/app.js':('app.js','text/javascript'), '/global.js':('global.js','text/javascript'), '/chat.js':('chat.js','text/javascript'), '/styles.css':('styles.css','text/css')}
             if parsed.path not in files: return self.send_json({'error':'Not found'},404)
             name,mime = files[parsed.path]
             self.send_bytes((ROOT/'dist'/name).read_bytes(),mime+'; charset=utf-8')
