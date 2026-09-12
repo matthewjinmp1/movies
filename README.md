@@ -43,7 +43,7 @@ Run each command only after the previous one succeeds. To refresh the data later
 
 ### Run the app
 
-Double-click `Start Movie Browser.command` or `run_server.command` to start the app and open http://localhost:3002/ in your default browser. Keep the terminal window open while using the app; press Control+C to stop it. Launching it again reuses the running movie browser. Pass `--no-browser` to start the server without opening a browser.
+Double-click `Start Movie Browser.command` to start the app and open http://localhost:3002/ in your default browser. `run_server.command` restarts this project’s existing movie-browser process on port 3002 before starting a fresh instance; it refuses to stop an unrelated program using that port. Keep the terminal window open while using the app; press Control+C to stop it. Pass `--no-browser` to start without opening a browser.
 
 Alternatively, run `python3 app/launch.py`. Use `python3 app/server.py` to start the server without opening a browser.
 The server listens only on this computer. No packages or external services are required.
