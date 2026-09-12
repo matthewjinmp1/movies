@@ -79,6 +79,8 @@ Release year preference also supports **Favor newer years**. Within a two-sided 
 
 ### Global score
 
+Global rank is the movie's position by Global score across the full library, independent of filters or the Starred view. Rank 1 is best. Equal displayed scores share a rank, with gaps afterward (1, 1, 3). Movies without a Global score have no rank. The column can be hidden, moved, or sorted; selecting it in Sort defaults to best rank first.
+
 The Global score column ranks preferences independently of filters, searches, pagination, and the Starred view. Open Global score settings to assign genre points (−10 to +10), field weights (0–10), numeric preferences, and a missing-data score. Genre points are averaged across every genre on the movie, including unassigned genres at 0. Thriller 3 and Horror −1 yields 1 point for a Thriller/Horror movie.
 
 Genre averages and numeric preferences can use library-wide percentiles: 100 × (movies below + half the tied movies) / movies with known values. Missing values are excluded from percentile populations and get the configured missing score. Tied values share a score; a constant population scores 50. Fixed genre scaling maps −10/0/+10 points to 0/50/100. Rating, votes, release year, and runtime can favor higher values, lower values, or closeness to a target. Fixed numeric scoring uses low/high anchors or a target and distance to zero, clamped to 0–100. Adult/non-adult scores are set directly.

@@ -41,6 +41,15 @@ class GlobalScoreTests(unittest.TestCase):
         row=result['rows'][0]
         single=query({'q':[row['tconst']]})['rows'][0]
         self.assertEqual(row['globalScore'],single['globalScore'])
+        self.assertEqual(row['globalRank'],1)
+        self.assertEqual(row['globalRank'],single['globalRank'])
+        ranked=query({'sort':['globalRank'],'direction':['asc']})
+        self.assertEqual([r['tconst'] for r in result['rows']],[r['tconst'] for r in ranked['rows']])
+        import sqlite3
+        with sqlite3.connect(g.ROOT/'global_scores.sqlite3') as db:
+            for movie in ranked['rows']:
+                expected=1+db.execute('SELECT COUNT(*) FROM scores WHERE globalScore > ?',(movie['globalScore'],)).fetchone()[0]
+                self.assertEqual(movie['globalRank'],expected)
         self.assertEqual(row['globalBreakdown'],single['globalBreakdown'])
         parts=row['globalBreakdown'];weight=sum(p['weight'] for p in parts)
         self.assertAlmostEqual(row['globalScore'],sum(p['score']*p['weight'] for p in parts)/weight,delta=0.1)
@@ -52,3 +61,4 @@ class GlobalScoreTests(unittest.TestCase):
             import sqlite3
             with sqlite3.connect(path) as db:
                 self.assertEqual(db.execute('SELECT COUNT(*) FROM scores WHERE globalScore IS NOT NULL').fetchone()[0],0)
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM ranks WHERE globalRank IS NOT NULL').fetchone()[0],0)

@@ -17,6 +17,7 @@ import global_scoring
 ROOT = Path(__file__).resolve().parent
 COLUMNS = [
     ('globalScore','Global score','number'),
+    ('globalRank','Global rank','number'),
     ('primaryTitle','Title','text'), ('filterScore','Filter score','number'), ('originalTitle','Original title','text'),
     ('startYear','Year','number'), ('averageRating','IMDb rating','number'),
     ('numVotes','Votes','number'), ('runtimeMinutes','Runtime (min)','number'),
@@ -43,7 +44,7 @@ def conditions(search, filters):
     if not isinstance(filters,list) or len(filters)>30:
         raise ValueError('Use at most 30 filters.')
     for f in filters:
-        if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore'):
+        if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore','globalRank'):
             raise ValueError('Unknown filter field.')
         key, op, value = f['field'], f.get('op'), f.get('value')
         kind = FIELDS[key]
@@ -107,7 +108,7 @@ def query(params):
     score = 'ROUND(100.0 * (' + ' + '.join(f'score_{i} * {c["weight"]}' for i,c in enumerate(components)) + f') / {weight}, 1)' if weight else 'NULL'
     with closing(connect(saved_ids if saved_view else ())) as db:
         global_settings=global_scoring.attach(db)
-        rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM movies JOIN global_cache.scores USING(tconst){where}) ORDER BY {sort}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
+        rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM movies JOIN global_cache.scores USING(tconst) JOIN global_cache.ranks USING(tconst){where}) ORDER BY {sort}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
     result=[]
     for record in rows:
         row=dict(record)

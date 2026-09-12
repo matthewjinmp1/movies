@@ -101,7 +101,7 @@ def ensure_cache(settings,source=None):
     """Build once per settings/snapshot; atomically replace the derived cache."""
     source=source or ROOT/'movies.sqlite3'
     stamp=source.stat()
-    signature=hashlib.sha256((json.dumps(settings,sort_keys=True)+str((str(source),stamp.st_mtime_ns,stamp.st_size))).encode()).hexdigest()
+    signature=hashlib.sha256(('rank-v1'+json.dumps(settings,sort_keys=True)+str((str(source),stamp.st_mtime_ns,stamp.st_size))).encode()).hexdigest()
     cache=ROOT/'global_scores.sqlite3'
     with LOCK:
         if cache.exists():
@@ -120,7 +120,10 @@ def ensure_cache(settings,source=None):
                         overall=round(sum(score*settings['weights'][key] for key,score in zip(LABELS,scores))/weight,1) if weight else None
                         yield (row[0],overall,*scores)
                 dst.executemany('INSERT INTO scores VALUES (?,?,?,?,?,?,?,?)',records())
-                dst.execute('CREATE INDEX score_order ON scores(globalScore DESC,tconst)');dst.commit()
+                dst.execute('CREATE INDEX score_order ON scores(globalScore DESC,tconst)')
+                dst.execute('CREATE TABLE ranks AS SELECT tconst, CASE WHEN globalScore IS NOT NULL THEN RANK() OVER (ORDER BY globalScore DESC) END AS globalRank FROM scores')
+                dst.execute('CREATE UNIQUE INDEX rank_movie ON ranks(tconst)')
+                dst.execute('CREATE INDEX rank_order ON ranks(globalRank,tconst)');dst.commit()
             os.replace(name,cache)
         finally:
             if os.path.exists(name): os.unlink(name)
