@@ -6,6 +6,7 @@ __pycache__/
 app/filters.json
 app/starred.json
 app/seen.json
+app/movie_worker.log
 app/global_scoring.json
 .env
 

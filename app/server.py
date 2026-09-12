@@ -15,6 +15,7 @@ import starred
 import seen
 import global_scoring
 import chat
+import movie_runs
 
 ROOT = Path(__file__).resolve().parent
 COLUMNS = [
@@ -134,6 +135,8 @@ def query(params):
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
+        if urlsplit(self.path).path.startswith('/api/scorer/'):
+            return self.scorer_post()
         if urlsplit(self.path).path != '/api/chat':
             return self.send_json({'error':'Not found'},404)
         origin=self.headers.get('Origin')
@@ -154,6 +157,38 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             import traceback; traceback.print_exc()
             return self.send_json({'error':'Could not complete the chat request.'},500)
+
+    def scorer_post(self):
+        origin = self.headers.get('Origin')
+        if origin and origin != 'http://' + self.headers.get('Host',''):
+            return self.send_json({'error':'Origin not allowed'},403)
+        try:
+            size = int(self.headers.get('Content-Length','0'))
+            if not 0 < size <= 1000000 or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
+                raise ValueError('Send a JSON request up to 1 MB.')
+            payload = json.loads(self.rfile.read(size))
+            if not isinstance(payload,dict):
+                raise ValueError('Invalid request.')
+            path = urlsplit(self.path).path
+            if path == '/api/scorer/lists':
+                return self.send_json(movie_runs.save_list(payload))
+            if path == '/api/scorer/archive-list':
+                with movie_runs.database() as db:
+                    db.execute('UPDATE lists SET archived=1 WHERE id=?',(payload.get('id'),))
+                return self.send_json({'saved':True})
+            if path == '/api/scorer/preview':
+                return self.send_json(movie_runs.preview(payload))
+            if path == '/api/scorer/runs':
+                return self.send_json({'id':movie_runs.create(payload)})
+            if path == '/api/scorer/action':
+                movie_runs.action(payload.get('id'),payload.get('action'))
+                return self.send_json({'saved':True})
+            return self.send_json({'error':'Not found'},404)
+        except (ValueError,TypeError,KeyError) as error:
+            return self.send_json({'error':str(error)},400)
+        except Exception:
+            import traceback; traceback.print_exc()
+            return self.send_json({'error':'Could not save scoring changes.'},500)
 
     def do_PUT(self):
         path = urlsplit(self.path).path
@@ -189,6 +224,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlsplit(self.path)
         try:
+            if parsed.path == '/api/scorer/lists':
+                args = parse_qs(parsed.query)
+                return self.send_json(movie_runs.get_list(args['id'][0]) if 'id' in args else movie_runs.lists())
+            if parsed.path == '/api/scorer/runs':
+                args = parse_qs(parsed.query)
+                return self.send_json(movie_runs.detail(args['id'][0]) if 'id' in args else movie_runs.history())
+            if parsed.path == '/scorer.js':
+                return self.send_bytes((ROOT/'dist'/'scorer.js').read_bytes(),'text/javascript; charset=utf-8')
             if parsed.path == '/api/filters':
                 return self.send_json(preferences.read())
             if parsed.path == '/api/global-scoring':

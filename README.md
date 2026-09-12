@@ -69,6 +69,19 @@ The app joins all 756,513 movie records with ratings by IMDb ID, including 348,2
 
 Run integration checks with `python3 -m unittest discover -s app -p 'test_*.py'`.
 
+### AI scoring runs and movie lists
+
+Open **AI scoring** for a workflow modeled on ai_stock_scorer's list manager, run setup, and saved rankings.
+
+- **Movie lists:** search titles or IMDb IDs in a paginated table, add individual movies or the search page, and remove selections in a second table. Add current library page uses the Movies tab's current page, filters, and All / Starred / Seen view. Name, save, edit, copy, or archive lists of up to 10,000 movies.
+- **Set run:** choose a saved list, run name, prompt, number of movies, response token limit, and concurrency (1–20). The count selects the first movies in saved list order. Optional placeholders are `{{MOVIE}}`, `{{YEAR}}`, and `{{IMDB_ID}}`. Preview the selection before clicking Start scoring run, which sends paid requests to OpenRouter. A cost estimate appears once reported request-cost history is available; it is an estimate and retries may increase it.
+- The model is `deepseek/deepseek-v4-flash-0731`, with temperature 0 and reasoning disabled. Each request includes the movie's source metadata. Responses must provide a 0–100 score and explanation as JSON. Unknown, malformed, out-of-range, and truncated scores are failures rather than fabricated scores. There is no live web search or plot database.
+- **Runs:** open saved rankings, star runs, inspect explanations/errors, and view progress, queue counts, ETA, tokens, reported cost, and provider usage. Ranking, failed, pending, and all-movie tables support search, sorting, pagination, and CSV export. Percentiles use successful movies in that run, with half credit for ties; equal scores share a rank.
+- **Stop** finishes in-flight requests and stops scheduling new movies. **Resume** handles queued movies; **Retry failed** requeues failures without rescoring successes. Each movie can make up to three attempts per pass. Failed attempts remain in usage totals. Copy run settings creates a new editable list of the original selection and pre-fills setup; archive hides a stopped/completed run.
+- Runs snapshot their prompt, model settings, and movie metadata when created. Later list edits do not change existing runs. Workers are independent processes and continue across tab closure or web-server restarts. If a worker exits unexpectedly, its run becomes interrupted and in-flight movies return to the queue for explicit resumption; uncertain requests may be billed again when resumed.
+
+Lists, run snapshots, responses, and usage are stored locally in `app/movie_runs.sqlite3`; worker logs go to `app/movie_worker.log`. Both stay out of Git. Prompt drafts and the selected scorer page are saved in browser storage. API credentials remain in the existing server-side `.env`.
+
 ### Filter score
 
 Filter score is a computed, sortable column (0–100), calculated across all matching movies before pagination. Existing filters remain strict. It is not an IMDb rating or probability. No active filter/search means no score. Click a score for its per-field breakdown, or expand How filter score works for the current rules.
