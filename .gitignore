@@ -1,0 +1,18 @@
+*.sqlite3
+*.building
+__pycache__/
+*.part
+.sites-runtime/
+app/filters.json
+app/starred.json
+app/global_scoring.json
+
+# Downloaded IMDb snapshots and generated exports stay local.
+*.tsv
+*.tsv.gz
+/movies.csv
+/movie_titles.txt
+/download_summary.json
+/ratings_download_summary.json
+*.sqlite3-*
+.DS_Store
