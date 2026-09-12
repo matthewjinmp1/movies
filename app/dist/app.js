@@ -4,8 +4,15 @@ const state={view:'all',columns:[...DEFAULT_COLUMNS],sort:'numVotes',direction:'
 let meta, data, controller, debounce;
 const format = new Intl.NumberFormat();
 const esc = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const savedViewsNote = document.getElementById('view-note');
+if (savedViewsNote && !document.querySelector('[data-view="seen"]')) savedViewsNote.insertAdjacentHTML('beforebegin','<button data-view="seen" aria-pressed="false">✓ Seen <span id="seen-count">0</span></button>');
+const basePersist = persist;
+persist = () => { if (!state.columns.includes('seen')) state.columns.splice(Math.min(1,state.columns.length),0,'seen'); basePersist(); };
+try { const savedPreferences = JSON.parse(localStorage.getItem('frame-preferences')); if (savedPreferences?.view === 'seen') state.view = 'seen'; } catch {}
 function persist(){try{localStorage.setItem('frame-preferences',JSON.stringify({columns:state.columns,sort:state.sort,direction:state.direction,size:state.size,visibleFilters:state.visibleFilters,scoreColumnAdded:true,googleColumnAdded:true,globalRankColumnAdded:true,globalColumnAdded:true,starColumnAdded:true,view:state.view}));}catch{}}
 function cell(row,key){if(key==='starred')return `<button class="save-star" data-star="${esc(row.tconst)}" aria-pressed="${row.starred}" aria-label="${row.starred?'Unstar':'Star'} ${esc(row.primaryTitle)}" title="${row.starred?'Remove from':'Add to'} starred movies">${row.starred?'★':'☆'}</button>`;if(key==='googleSearch'){const query=[row.primaryTitle,row.startYear,'movie'].filter(v=>v!==null&&v!=='').join(' ');return `<a class="google-search" href="https://www.google.com/search?q=${encodeURIComponent(query)}" target="_self" data-google-search aria-label="Search Google for ${esc(row.primaryTitle)}${row.startYear?' ('+row.startYear+')':''}">Search Google</a>`;}const v=row[key];if(v===null)return '<span class="null">—</span>';if(key==='globalScore')return `<details class="score-detail"><summary aria-label="Global score ${Number(v).toFixed(1)} out of 100; show breakdown">${Number(v).toFixed(1)}<span>/100</span></summary><div>${row.globalBreakdown.map(c=>`<p><span>${esc(c.label)} <small>×${c.weight}${c.label==='Genres'?' · average points '+(c.raw===null?'missing':Number(c.raw).toFixed(2)):''}</small></span><strong>${Number(c.score).toFixed(1)}</strong></p>`).join('')}<small>Weighted average across the full library. Weight 0 has no effect.</small></div></details>`;if(key==='filterScore')return `<details class="score-detail"><summary aria-label="Filter score ${Number(v).toFixed(1)} out of 100; show breakdown">${Number(v).toFixed(1)}<span>/100</span></summary><div>${row.scoreBreakdown.map(c=>`<p><span>${esc(c.label)} <small>×${c.weight}</small></span><strong>${Number(c.score).toFixed(1)}</strong></p>`).join('')}<small>Weighted average of active fields</small></div></details>`;if(key==='primaryTitle')return `<a href="https://www.imdb.com/title/${encodeURIComponent(row.tconst)}/" target="_blank" rel="noreferrer">${esc(v)}</a>`;if(key==='averageRating')return `<span class="rating"><span class="star" aria-hidden="true">★</span>${Number(v).toFixed(1)}</span>`;if(key==='globalRank')return '#'+format.format(v);if(key==='numVotes')return format.format(v);if(key==='genres')return v.split(',').map(g=>`<span class="genre-tag">${esc(g)}</span>`).join('');if(key==='isAdult')return v?'Yes':'No';return esc(v);}
+const baseCell = cell;
+cell = (row,key) => key==='seen' ? `<button class="save-seen" data-seen="${esc(row.tconst)}" aria-pressed="${row.seen}" aria-label="${row.seen?'Mark':'Unmark'} ${esc(row.primaryTitle)} as seen" title="${row.seen?'Mark as unseen':'Mark as seen'}">${row.seen?'✓':'○'}</button>` : baseCell(row,key);
 function renderTable(){if(!data)return;$('score-rules').innerHTML=data.scoreRules.length?data.scoreRules.map(r=>`<li><strong>${esc(r.label)} (weight ${r.weight}):</strong> ${esc(r.rule)}</li>`).join(''):'<li>Choose a filter value or enter a search to calculate scores.</li>';const columns=state.columns.map(k=>meta.columns.find(c=>c.key===k));$('movies-table').querySelector('thead').innerHTML='<tr>'+columns.map(c=>c.kind==='action'?`<th class="action-heading">${esc(c.label)}</th>`:`<th class="${c.kind==='number'?'numeric':''}" aria-sort="${state.sort===c.key?(state.direction==='asc'?'ascending':'descending'):'none'}"><button data-sort="${c.key}">${esc(c.label)}${state.sort===c.key?(state.direction==='asc'?' ↑':' ↓'):''}</button></th>`).join('')+'</tr>';$('movies-table').querySelector('tbody').innerHTML=data.rows.map(r=>'<tr>'+columns.map(c=>`<td class="${c.kind==='number'?'numeric ':''}${c.key==='primaryTitle'?'title-cell':''}" title="${c.kind==='action'?(c.key==='starred'?'Save movie':'Search in this tab'):r[c.key]===null?'Not available':esc(r[c.key])}">${cell(r,c.key)}</td>`).join('')+'</tr>').join('');$('empty').hidden=data.total!==0;$('movies-table').hidden=data.total===0;$('results-title').textContent=state.view==='starred'?'Starred movies':state.q.trim()||state.filters.length?'Matching movies':'All movies';$('starred-count').textContent=format.format(data.starredCount);for(const b of document.querySelectorAll('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===state.view));$('view-note').textContent=state.view==='starred'?'Your saved movies. Current filters also apply here.':'Star movies to save them for later.';$('empty').querySelector('strong').textContent=state.view==='starred'&&!data.starredCount?'No starred movies yet':'No movies found';$('empty').querySelector('p').textContent=state.view==='starred'&&!data.starredCount?'Go to All movies and click a star to save a movie.':'Try a different title or remove a filter.';$('result-count').textContent=format.format(data.total);$('result-summary').textContent=data.total?`${format.format((data.page-1)*data.size+1)}–${format.format(Math.min(data.page*data.size,data.total))} of ${format.format(data.total)} movies`:'0 matching movies';$('page').value=data.page;$('page').max=data.pages;$('pages').textContent=`of ${format.format(data.pages)}`;for(const id of ['first','previous'])$(id).disabled=data.page<=1;for(const id of ['next','last'])$(id).disabled=data.page>=data.pages;$('status').textContent=$('result-summary').textContent;}
 async function load(){controller?.abort();controller=new AbortController();const current=controller;$('error').hidden=true;$('movies-table').setAttribute('aria-busy','true');document.querySelector('.results').classList.add('loading');const params=new URLSearchParams({...state,scoring:JSON.stringify(state.scoring),filters:JSON.stringify(state.filters.filter(f=>['missing','present'].includes(f.op)||String(f.value).trim()!==''))});try{const response=await fetch('/api/movies?'+params,{signal:current.signal});const result=await response.json();if(!response.ok)throw new Error(result.error);if(current!==controller)return;data=result;state.page=data.page;renderTable();}catch(e){if(e.name!=='AbortError'){$('error').textContent=e.message+' Change your filters or reload to try again.';$('error').hidden=false;}}finally{if(current===controller){document.querySelector('.results').classList.remove('loading');$('movies-table').setAttribute('aria-busy','false');}}}
 function refresh(){state.page=1;clearTimeout(debounce);debounce=setTimeout(load,250);}
@@ -17,6 +24,15 @@ function renderColumns(){
   return `<div class="column-option"><label><input type="checkbox" value="${c.key}" ${visible?'checked':''} ${state.columns.length===1&&visible?'disabled':''}>${esc(c.label)}</label>${visible?`<div class="column-moves"><button type="button" data-move-column="${c.key}" data-step="-1" aria-label="Move ${esc(c.label)} left" title="Move left" ${index===0?'disabled':''}>←</button><button type="button" data-move-column="${c.key}" data-step="1" aria-label="Move ${esc(c.label)} right" title="Move right" ${index===state.columns.length-1?'disabled':''}>→</button></div>`:''}</div>`;
  }).join('');
 }
+const baseRenderColumns = renderColumns;
+renderColumns = () => {
+ if (meta && !meta.columns.some(c=>c.key==='seen')) {
+  const starIndex=meta.columns.findIndex(c=>c.key==='starred');
+  meta.columns.splice(starIndex<0?0:starIndex+1,0,{key:'seen',label:'Seen',kind:'action'});
+ }
+ if (!state.columns.includes('seen')) state.columns.splice(Math.min(1,state.columns.length),0,'seen');
+ baseRenderColumns();
+};
 const FILTERS = [
   {key:'genres',label:'Genres'},
   {key:'averageRating',label:'IMDb rating'},
@@ -171,5 +187,25 @@ $('movies-table').addEventListener('click',async e=>{
   const result=await response.json();if(!response.ok)throw new Error(result.error);
   clearTimeout(debounce);await load();
  }catch(error){$('error').textContent='Could not save movie: '+error.message;$('error').hidden=false;button.disabled=false;}
+});
+const baseRenderTable = renderTable;
+renderTable = () => {
+ baseRenderTable();
+ if (!data) return;
+ $('results-title').textContent=state.view==='starred'?'Starred movies':state.view==='seen'?'Seen movies':state.q.trim()||state.filters.length?'Matching movies':'All movies';
+ $('seen-count').textContent=format.format(data.seenCount);
+ for (const button of document.querySelectorAll('[data-seen]')) button.closest('td').title=button.title;
+ $('view-note').textContent=state.view==='starred'?'Your saved movies. Current filters also apply here.':state.view==='seen'?'Movies you have marked as seen. Current filters also apply here.':'Star or mark movies as seen for later.';
+ $('empty').querySelector('strong').textContent=state.view==='starred'&&!data.starredCount?'No starred movies yet':state.view==='seen'&&!data.seenCount?'No seen movies yet':'No movies found';
+ $('empty').querySelector('p').textContent=state.view==='starred'&&!data.starredCount?'Go to All movies and click a star to save a movie.':state.view==='seen'&&!data.seenCount?'Go to All movies and mark a movie as seen.':'Try a different title or remove a filter.';
+};
+$('movies-table').addEventListener('click',async e=>{
+ const button=e.target.closest('[data-seen]');if(!button||button.disabled)return;
+ const selected=button.getAttribute('aria-pressed')!=='true';button.disabled=true;
+ try{
+  const response=await fetch('/api/seen',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tconst:button.dataset.seen,seen:selected})});
+  const result=await response.json();if(!response.ok)throw new Error(result.error);
+  clearTimeout(debounce);await load();
+ }catch(error){$('error').textContent='Could not save seen status: '+error.message;$('error').hidden=false;button.disabled=false;}
 });
 init();

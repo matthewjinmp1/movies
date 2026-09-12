@@ -16,6 +16,7 @@ Usage terms: https://help.imdb.com/article/imdb/general-information/can-i-use-im
 - `download_summary.json`: processing date, counts, source, and filter.
 - `title.ratings.tsv.gz`: original compressed ratings dataset with IMDb ID (`tconst`), weighted rating (`averageRating`), and vote count (`numVotes`). Includes all rated title types, not just movies; not yet merged into `movies.csv`.
 - `ratings_download_summary.json`: ratings download date, verified record count, fields, and file size.
+- `app/seen.json`: your local list of IMDb IDs marked as seen; it is created by the app and excluded from Git.
 
 The extraction selects only `titleType == movie`; shorts, TV movies, series, episodes, and other formats are excluded. No language, year, release-status, or adult-content filter is applied.
 
@@ -61,7 +62,8 @@ The app joins all 756,513 movie records with ratings by IMDb ID, including 348,2
 - Select multiple genres and match any or all selected genres. Other active filters are combined with AND.
 - Set minimum ratings or votes, year and runtime ranges, or rated/unrated availability. Blank values leave that field unrestricted. There are no dedicated filters for IMDb ID, title type, or end year; use search for movie names or IDs.
 - Select 25, 50, 100, or 250 rows per page; jump directly to a page or use the navigation buttons.
-- Column, sorting, page-size, and visible-filter preferences are saved in this browser. Search, filter values, and visible filters are automatically saved in `app/filters.json` and restored on refresh or restart. Clear all resets values while leaving the chosen controls visible.
+- Column, sorting, page-size, visible-filter, and selected-list-view preferences are saved in this browser. Search, filter values, and visible filters are automatically saved in `app/filters.json` and restored on refresh or restart. Clear all resets values while leaving the chosen controls visible.
+- Use the Starred and Seen tabs to view those saved lists. The Star and Seen columns can be shown, hidden, and moved like the other columns. Click a row’s Seen control to mark or unmark a movie; the list is stored in `app/seen.json` on this computer.
 
 `app/movies.sqlite3` is a generated index. To refresh after replacing the source snapshots, stop the server, run `python3 app/import_data.py`, and restart the server. This does not download new data.
 

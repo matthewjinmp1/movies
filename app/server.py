@@ -12,6 +12,7 @@ from scoring import score_components
 import preferences
 import score_settings
 import starred
+import seen
 import global_scoring
 import chat
 
@@ -27,7 +28,7 @@ COLUMNS = [
 ]
 FIELDS = {key:kind for key,_,kind in COLUMNS}
 
-def connect(saved_ids=()):
+def connect(saved_ids=(), seen_ids=()):
     db = sqlite3.connect(f'file:{ROOT / "movies.sqlite3"}?mode=ro', uri=True)
     db.row_factory = sqlite3.Row
     db.create_function('CASEFOLD', 1, lambda s: s.casefold() if s is not None else None, deterministic=True)
@@ -35,6 +36,8 @@ def connect(saved_ids=()):
     db.create_function('SCOREPOWER', 2, lambda value,power: value**power, deterministic=True)
     db.execute('CREATE TEMP TABLE saved_movies (tconst TEXT PRIMARY KEY)')
     db.executemany('INSERT INTO saved_movies VALUES (?)', ((v,) for v in saved_ids))
+    db.execute('CREATE TEMP TABLE seen_movies (tconst TEXT PRIMARY KEY)')
+    db.executemany('INSERT INTO seen_movies VALUES (?)', ((v,) for v in seen_ids))
     return db
 
 def conditions(search, filters):
@@ -77,11 +80,13 @@ def conditions(search, filters):
     return (' WHERE '+' AND '.join(clauses) if clauses else ''), args
 
 @lru_cache(maxsize=128)
-def count_matches(search, encoded, saved_ids=None):
+def count_matches(search, encoded, saved_ids=None, seen_ids=None):
     where,args = conditions(search,json.loads(encoded))
     if saved_ids is not None:
         where += (' AND ' if where else ' WHERE ') + 'tconst IN (SELECT tconst FROM saved_movies)'
-    with closing(connect(saved_ids or ())) as db:
+    if seen_ids is not None:
+        where += (' AND ' if where else ' WHERE ') + 'tconst IN (SELECT tconst FROM seen_movies)'
+    with closing(connect(saved_ids or (), seen_ids or ())) as db:
         return db.execute('SELECT count(*) FROM movies'+where,args).fetchone()[0]
 
 def query(params):
@@ -89,15 +94,22 @@ def query(params):
     filters = json.loads(params.get('filters',['[]'])[0])
     where,args = conditions(search,filters)
     saved_ids = starred.read()
-    saved_view = params.get('view',['all'])[0] == 'starred'
+    seen_ids = seen.read()
+    view = params.get('view',['all'])[0]
+    if view not in ('all', 'starred', 'seen'):
+        raise ValueError('Invalid movie view.')
+    saved_view = view == 'starred'
+    seen_view = view == 'seen'
     if saved_view:
         where += (' AND ' if where else ' WHERE ') + 'tconst IN (SELECT tconst FROM saved_movies)'
+    if seen_view:
+        where += (' AND ' if where else ' WHERE ') + 'tconst IN (SELECT tconst FROM seen_movies)'
     sort = params.get('sort',['numVotes'])[0]
     direction = params.get('direction',['desc'])[0]
     if sort not in FIELDS or direction not in ['asc','desc']: raise ValueError('Invalid sort.')
     size = int(params.get('size',['50'])[0])
     if size not in [25,50,100,250]: raise ValueError('Invalid page size.')
-    total = count_matches(search,json.dumps(filters,sort_keys=True),tuple(sorted(saved_ids)) if saved_view else None)
+    total = count_matches(search,json.dumps(filters,sort_keys=True),tuple(sorted(saved_ids)) if saved_view else None,tuple(sorted(seen_ids)) if seen_view else None)
     pages = max(1,math.ceil(total/size))
     page = max(1,min(int(params.get('page',['1'])[0]),pages))
     collation = ' COLLATE NOCASE' if FIELDS[sort] in ['text','genre'] else ''
@@ -107,17 +119,18 @@ def query(params):
     score_args = [v for c in components for v in c['args']]
     weight=sum(c['weight'] for c in components)
     score = 'ROUND(100.0 * (' + ' + '.join(f'score_{i} * {c["weight"]}' for i,c in enumerate(components)) + f') / {weight}, 1)' if weight else 'NULL'
-    with closing(connect(saved_ids if saved_view else ())) as db:
+    with closing(connect(saved_ids if saved_view else (), seen_ids if seen_view else ())) as db:
         global_settings=global_scoring.attach(db)
         rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM movies JOIN global_cache.scores USING(tconst) JOIN global_cache.ranks USING(tconst){where}) ORDER BY {sort}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
     result=[]
     for record in rows:
         row=dict(record)
         row['starred'] = row['tconst'] in saved_ids
+        row['seen'] = row['tconst'] in seen_ids
         row['globalBreakdown']=[dict(label=label,weight=global_settings['weights'][key],score=round(row.pop('g_'+key),1),raw=global_scoring.utility(key,row[key],global_settings) if key=='genres' else row[key]) for key,label in global_scoring.LABELS.items()]
         row['scoreBreakdown']=[dict(label=c['label'],weight=c['weight'],score=round(100*row.pop(f'score_{i}'),1)) for i,c in enumerate(components)]
         result.append(row)
-    return dict(rows=result,total=total,page=page,pages=pages,size=size,starredCount=len(saved_ids),scoreRules=[dict(label=c['label'],rule=c['rule'],weight=c['weight']) for c in components])
+    return dict(rows=result,total=total,page=page,pages=pages,size=size,starredCount=len(saved_ids),seenCount=len(seen_ids),scoreRules=[dict(label=c['label'],rule=c['rule'],weight=c['weight']) for c in components])
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -144,7 +157,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlsplit(self.path).path
-        if path not in ('/api/filters','/api/starred','/api/global-scoring'):
+        if path not in ('/api/filters','/api/starred','/api/seen','/api/global-scoring'):
             return self.send_json({'error':'Not found'},404)
         origin=self.headers.get('Origin')
         if origin and origin != 'http://' + self.headers.get('Host',''):
@@ -157,14 +170,15 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(size))
             if path == '/api/global-scoring':
                 return self.send_json({'settings':global_scoring.save(payload),'saved':True})
-            if path == '/api/starred':
+            if path in ('/api/starred', '/api/seen'):
                 if not isinstance(payload,dict): raise ValueError('Invalid selection.')
                 movie_id = payload.get('tconst')
                 with closing(connect()) as db:
                     if not isinstance(movie_id,str) or not db.execute('SELECT 1 FROM movies WHERE tconst=?',(movie_id,)).fetchone():
                         raise ValueError('Movie not found.')
-                count = starred.update(movie_id,payload.get('starred'))
-                return self.send_json({'saved':True,'starredCount':count})
+                store, key = (starred, 'starred') if path == '/api/starred' else (seen, 'seen')
+                count = store.update(movie_id, payload.get(key))
+                return self.send_json({'saved':True, f'{key}Count':count})
             preferences.save(payload)
             return self.send_json({'saved':True})
         except (ValueError,TypeError,KeyError) as error:

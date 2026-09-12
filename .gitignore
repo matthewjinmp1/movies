@@ -5,6 +5,7 @@ __pycache__/
 .sites-runtime/
 app/filters.json
 app/starred.json
+app/seen.json
 app/global_scoring.json
 .env
 
