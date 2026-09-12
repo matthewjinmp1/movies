@@ -80,6 +80,9 @@ def complete(messages):
         'messages': messages,
         'max_tokens': MAX_RESPONSE_TOKENS,
         'temperature': 0.7,
+        # This is a simple chat UI; do not request provider reasoning tokens that
+        # can consume the completion budget without producing final content.
+        'reasoning': {'enabled': False},
     }).encode('utf-8')
     request = urllib.request.Request(API_URL, data=payload, method='POST', headers={
         'Authorization': f'Bearer {api_key}',
@@ -93,7 +96,12 @@ def complete(messages):
             with urllib.request.urlopen(request, timeout=90) as response:
                 body = response.read()
                 result = json.loads(body.decode('utf-8'))
-            return response_text(result)
+            try:
+                return response_text(result)
+            except RuntimeError as error:
+                last_error = error
+                if attempt == MAX_ATTEMPTS:
+                    raise
         except urllib.error.HTTPError as error:
             last_error = error
             try:

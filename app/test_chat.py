@@ -55,3 +55,16 @@ class ChatTests(unittest.TestCase):
              mock.patch.object(chat.time, 'sleep'):
             self.assertEqual(chat.complete([{'role': 'user', 'content': 'hello'}]), 'recovered')
         self.assertEqual(urlopen.call_count, 2)
+
+    def test_complete_retries_empty_final_content(self):
+        class Response:
+            def __init__(self, content): self.content = content
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read(self): return ('{"choices":[{"message":{"content":"' + self.content + '"}}]}').encode()
+
+        with mock.patch.dict(chat.os.environ, {'OPENROUTER_KEY': 'test-key'}, clear=False), \
+             mock.patch.object(chat.urllib.request, 'urlopen', side_effect=[Response(''), Response('recovered')]) as urlopen, \
+             mock.patch.object(chat.time, 'sleep'):
+            self.assertEqual(chat.complete([{'role': 'user', 'content': 'hello'}]), 'recovered')
+        self.assertEqual(urlopen.call_count, 2)
