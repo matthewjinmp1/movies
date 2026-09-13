@@ -103,3 +103,7 @@ The Global score column ranks preferences independently of filters, searches, pa
 Genre averages and numeric preferences can use library-wide percentiles: 100 × (movies below + half the tied movies) / movies with known values. Missing values are excluded from percentile populations and get the configured missing score. Tied values share a score; a constant population scores 50. Fixed genre scaling maps −10/0/+10 points to 0/50/100. Rating, votes, release year, and runtime can favor higher values, lower values, or closeness to a target. Fixed numeric scoring uses low/high anchors or a target and distance to zero, clamped to 0–100. Adult/non-adult scores are set directly.
 
 The overall score is the weighted mean of field scores. Zero-weight fields have no effect; all weights zero gives a blank score. Defaults weight rating 3, genres/votes/year 1, and runtime/adult 0. Genre points start at 0. Click a Global score for its breakdown. Save & apply persists to `app/global_scoring.json`; Rank by global score sorts using the saved settings. The derived `app/global_scores.sqlite3` cache rebuilds when settings or the movie snapshot change. No external requests are needed.
+
+### Blocked movies
+
+Use the Block column to hide movies from All movies, Starred, and Seen. Open the Blocked tab to review and unblock them; current filters also apply there. Blocking preserves stars and seen status. Choices are saved locally in `app/blocked.json`, which is excluded from Git.

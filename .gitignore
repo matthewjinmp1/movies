@@ -19,3 +19,5 @@ app/global_scoring.json
 /ratings_download_summary.json
 *.sqlite3-*
 .DS_Store
+
+app/blocked.json
