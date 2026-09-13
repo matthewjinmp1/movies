@@ -16,3 +16,5 @@
 .movie-poster{width:48px;height:72px;object-fit:cover;border-radius:4px}.mdb-text{white-space:normal;min-width:180px;max-width:360px}.mdb-text summary{cursor:pointer}.mdb-options{max-height:220px;overflow:auto}
 
 .column-moves .column-position{width:58px;min-height:34px;padding:3px 5px;text-align:center;font-variant-numeric:tabular-nums}#columns-menu{width:min(410px,calc(100vw - 40px))}
+
+.weight-share{color:var(--gold);font-variant-numeric:tabular-nums;font-size:12px}
