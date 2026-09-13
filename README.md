@@ -109,3 +109,9 @@ The overall score is the weighted mean of field scores. Zero-weight fields have 
 Use the Block column to hide movies from All movies, Starred, and Seen. Open the Blocked tab to review and unblock them; current filters also apply there. Blocking preserves stars and seen status. Choices are saved locally in `app/blocked.json`, which is excluded from Git.
 
 Select **Not seen** in the filter picker to hide movies marked as seen. Remove it to include them again. This selection persists with your filters and does not affect scoring.
+
+### MDBList enrichment download
+
+`python3 app/fetch_mdblist.py` saves full MDBList responses locally using `MDBList_KEY` from `.env`. It freezes the first 1,000 unseen, unblocked movies with at least 100,000 IMDb votes, ordered by the current global score, in `app/mdblist_data/selection.json`. Subsequent invocations resume that same selection and skip saved movies. Each movie uses one detail request with optional reviews, keywords, extra metadata, and recommendations; four requests may run concurrently. Errors stop new requests without automatic retries. `--max-requests N` caps the number of movie requests for that invocation.
+
+Responses, the selection snapshot, and the summary stay in the Git-ignored `app/mdblist_data/` directory. The downloader preserves the source data; it does not add new table columns or change existing scores.
