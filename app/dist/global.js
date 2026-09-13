@@ -31,18 +31,14 @@ function updateGlobalControls(){
 async function initGlobalSettings(){
  const response=await fetch('/api/global-scoring');const result=await response.json();if(!response.ok)throw new Error(result.error);
  globalSettings=result.settings;globalDefaults=result.defaults;for(const f of meta.enrichmentFields||[])if(f.kind==='number')GLOBAL_FIELDS[f.key]=f.label;renderGlobalSettings();
+ await initGlobalPresets();
  $('global-form').addEventListener('change',updateGlobalControls);
  $('global-weights').addEventListener('input',updateWeightShares);
  $('global-reset').onclick=()=>{globalSettings=structuredClone(globalDefaults);renderGlobalSettings();$('global-status').textContent='Default controls restored. Save to apply.';};
  $('global-rank').onclick=()=>{state.sort='globalScore';state.direction='desc';if(!state.columns.includes('globalScore'))state.columns.splice(1,0,'globalScore');renderColumns();syncSort();refresh();};
  $('global-form').addEventListener('submit',async event=>{
   event.preventDefault();const form=event.currentTarget;if(!form.reportValidity())return;
-  const next=structuredClone(globalSettings);
-  for(const key of Object.keys(GLOBAL_FIELDS))next.weights[key]=Number(form.elements['gw-'+key].value);
-  next.genrePoints=Object.fromEntries(meta.genres.map((genre,i)=>[genre,Number(form.elements['gg-'+i].value)]));
-  next.genreMode=form.elements.genreMode.value;next.missingScore=Number(form.elements.missingScore.value);
-  next.adultScores={'0':Number(form.elements.adult0.value),'1':Number(form.elements.adult1.value)};
-  for(const [key,f] of Object.entries(next.fields))for(const part of Object.keys(f))f[part]=['mode','scale'].includes(part)?form.elements[key+'-'+part].value:Number(form.elements[key+'-'+part].value);
+  const next=readGlobalControls();
   const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);$('global-status').textContent='Saving and recalculating the full library…';
   try{
    const response=await fetch('/api/global-scoring',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(next)});
@@ -51,4 +47,34 @@ async function initGlobalSettings(){
   }catch(error){$('global-status').textContent='Could not apply settings: '+error.message;}
   finally{buttons.forEach(b=>b.disabled=false);}
  });
+}
+
+function readGlobalControls(){
+ const form=$('global-form');
+  const next=structuredClone(globalSettings);
+  for(const key of Object.keys(GLOBAL_FIELDS))next.weights[key]=Number(form.elements['gw-'+key].value);
+  next.genrePoints=Object.fromEntries(meta.genres.map((genre,i)=>[genre,Number(form.elements['gg-'+i].value)]));
+  next.genreMode=form.elements.genreMode.value;next.missingScore=Number(form.elements.missingScore.value);
+  next.adultScores={'0':Number(form.elements.adult0.value),'1':Number(form.elements.adult1.value)};
+  for(const [key,f] of Object.entries(next.fields))for(const part of Object.keys(f))f[part]=['mode','scale'].includes(part)?form.elements[key+'-'+part].value:Number(form.elements[key+'-'+part].value);
+ return next;
+}
+
+async function initGlobalPresets(){
+ const container=document.createElement('section');container.className='preset-controls';
+ container.innerHTML=`<h3>Saved scoring presets</h3><div class="scoring-actions"><label>Preset<select id="global-preset-select"></select></label><button type="button" id="global-preset-load">Load settings</button><label>Preset name<input id="global-preset-name" maxlength="100" placeholder="e.g. Thriller night"></label><button type="button" id="global-preset-save">Save as new</button><button type="button" id="global-preset-update">Update selected</button><button type="button" id="global-preset-delete">Delete selected</button></div><p class="muted">Save as new captures the controls below. Loading fills the controls; use Save &amp; apply global scoring to update the rankings. Editing controls never changes a preset unless you update it.</p><p id="global-preset-status" role="status"></p>`;
+ $('global-form').before(container);
+ let presets=[];
+ async function request(payload){const response=await fetch('/api/global-presets',payload?{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}:undefined);const result=await response.json();if(!response.ok)throw Error(result.error||'Could not load presets.');return result;}
+ function render(selected=''){ $('global-preset-select').innerHTML='<option value="">Choose a preset</option>'+presets.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');$('global-preset-select').value=selected;}
+ $('global-preset-select').onchange=()=>{const p=presets.find(p=>p.id===$('global-preset-select').value);if(p)$('global-preset-name').value=p.name;};
+ $('global-preset-load').onclick=()=>{const p=presets.find(p=>p.id===$('global-preset-select').value);if(!p){$('global-preset-status').textContent='Choose a preset first.';return;}globalSettings=structuredClone(p.settings);renderGlobalSettings();$('global-preset-status').textContent=`Loaded ${p.name}. Save & apply global scoring to update rankings.`;};
+ for(const action of ['save','update','delete'])$('global-preset-'+action).onclick=async()=>{
+  const id=$('global-preset-select').value;if(action!=='save'&&!id){$('global-preset-status').textContent='Choose a preset first.';return;}
+  if(action!=='delete'&&!$('global-form').reportValidity())return;
+  const name=$('global-preset-name').value.trim();const buttons=[...container.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+  try{presets=await request({action,id,name,settings:action==='delete'?undefined:readGlobalControls()});render(action==='delete'?'':action==='save'?presets.find(p=>p.name===name)?.id:id);$('global-preset-status').textContent=action==='delete'?'Preset deleted. Current scoring is unchanged.':'Preset saved on this computer.';}
+  catch(e){$('global-preset-status').textContent=e.message;}finally{buttons.forEach(b=>b.disabled=false);}
+ };
+ try{presets=await request();render();}catch(e){$('global-preset-status').textContent=e.message;}
 }
