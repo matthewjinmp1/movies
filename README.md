@@ -107,3 +107,5 @@ The overall score is the weighted mean of field scores. Zero-weight fields have 
 ### Blocked movies
 
 Use the Block column to hide movies from All movies, Starred, and Seen. Open the Blocked tab to review and unblock them; current filters also apply there. Blocking preserves stars and seen status. Choices are saved locally in `app/blocked.json`, which is excluded from Git.
+
+Select **Not seen** in the filter picker to hide movies marked as seen. Remove it to include them again. This selection persists with your filters and does not affect scoring.

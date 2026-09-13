@@ -52,6 +52,11 @@ def conditions(search, filters):
     if not isinstance(filters,list) or len(filters)>30:
         raise ValueError('Use at most 30 filters.')
     for f in filters:
+        if isinstance(f, dict) and f.get('field') == 'notSeen':
+            if f.get('op') != 'eq' or f.get('value') is not True:
+                raise ValueError('Invalid not seen filter.')
+            clauses.append('tconst NOT IN (SELECT tconst FROM seen_movies)')
+            continue
         if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore','globalRank'):
             raise ValueError('Unknown filter field.')
         key, op, value = f['field'], f.get('op'), f.get('value')
@@ -84,14 +89,14 @@ def conditions(search, filters):
     return (' WHERE '+' AND '.join(clauses) if clauses else ''), args
 
 @lru_cache(maxsize=128)
-def count_matches(search, encoded, saved_ids=None, seen_ids=None, blocked_ids=(), blocked_view=False):
+def count_matches(search, encoded, saved_ids=None, seen_ids=None, blocked_ids=(), blocked_view=False, unseen_ids=()):
     where,args = conditions(search,json.loads(encoded))
     if saved_ids is not None:
         where += (' AND ' if where else ' WHERE ') + 'tconst IN (SELECT tconst FROM saved_movies)'
     if seen_ids is not None:
         where += (' AND ' if where else ' WHERE ') + 'tconst IN (SELECT tconst FROM seen_movies)'
     where += (' AND ' if where else ' WHERE ') + 'tconst ' + ('IN' if blocked_view else 'NOT IN') + ' (SELECT tconst FROM blocked_movies)'
-    with closing(connect(saved_ids or (), seen_ids or (), blocked_ids)) as db:
+    with closing(connect(saved_ids or (), seen_ids or unseen_ids, blocked_ids)) as db:
         return db.execute('SELECT count(*) FROM movies'+where,args).fetchone()[0]
 
 def query(params):
@@ -117,17 +122,17 @@ def query(params):
     if sort not in FIELDS or direction not in ['asc','desc']: raise ValueError('Invalid sort.')
     size = int(params.get('size',['50'])[0])
     if size not in [25,50,100,250]: raise ValueError('Invalid page size.')
-    total = count_matches(search,json.dumps(filters,sort_keys=True),tuple(sorted(saved_ids)) if saved_view else None,tuple(sorted(seen_ids)) if seen_view else None,tuple(sorted(blocked_ids)),blocked_view)
+    total = count_matches(search,json.dumps(filters,sort_keys=True),tuple(sorted(saved_ids)) if saved_view else None,tuple(sorted(seen_ids)) if seen_view else None,tuple(sorted(blocked_ids)),blocked_view,tuple(sorted(seen_ids)))
     pages = max(1,math.ceil(total/size))
     page = max(1,min(int(params.get('page',['1'])[0]),pages))
     collation = ' COLLATE NOCASE' if FIELDS[sort] in ['text','genre'] else ''
     settings=score_settings.validate(json.loads(params.get('scoring',['null'])[0]))
-    components = score_components(filters, search, settings)
+    components = score_components([f for f in filters if f['field'] != 'notSeen'], search, settings)
     extra = ''.join(f', ({c["sql"]}) AS score_{i}' for i,c in enumerate(components))
     score_args = [v for c in components for v in c['args']]
     weight=sum(c['weight'] for c in components)
     score = 'ROUND(100.0 * (' + ' + '.join(f'score_{i} * {c["weight"]}' for i,c in enumerate(components)) + f') / {weight}, 1)' if weight else 'NULL'
-    with closing(connect(saved_ids if saved_view else (), seen_ids if seen_view else (), blocked_ids)) as db:
+    with closing(connect(saved_ids if saved_view else (), seen_ids, blocked_ids)) as db:
         global_settings=global_scoring.attach(db)
         rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM movies JOIN global_cache.scores USING(tconst) JOIN global_cache.ranks USING(tconst){where}) ORDER BY {sort}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
     result=[]

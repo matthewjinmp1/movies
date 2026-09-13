@@ -17,14 +17,16 @@ def validate(data):
     if not isinstance(data.get('q'),str) or len(data['q'])>500:
         raise ValueError('Search must be at most 500 characters.')
     visible=data.get('visibleFilters')
-    if not isinstance(visible,list) or len(visible)>6 or any(not isinstance(k,str) or k not in KEYS for k in visible) or len(set(visible))!=len(visible):
+    if not isinstance(visible,list) or len(visible)>7 or any(not isinstance(k,str) or k not in KEYS | {'notSeen'} for k in visible) or len(set(visible))!=len(visible):
         raise ValueError('Invalid visible filters.')
     values=data.get('values')
-    if not isinstance(values,dict) or set(values)!=KEYS:
+    if not isinstance(values,dict) or set(values) not in (KEYS, KEYS | {'notSeen'}):
         raise ValueError('Invalid filter values.')
     for key,v in values.items():
         if not isinstance(v,dict): raise ValueError('Invalid filter value.')
-        if key=='genres':
+        if key=='notSeen':
+            if v != {}: raise ValueError('Invalid not seen choice.')
+        elif key=='genres':
             genres=v.get('values')
             if v.get('mode') not in ('any_of','all_of') or not isinstance(genres,list) or len(genres)>30 or any(not isinstance(g,str) or not g or len(g)>50 or ',' in g for g in genres):
                 raise ValueError('Invalid genre choices.')

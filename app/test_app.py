@@ -1,6 +1,7 @@
 """Integration checks against the imported personal IMDb snapshot."""
 import json
 import unittest
+from unittest.mock import patch
 from server import query, COLUMNS, connect
 from scoring import score_components
 import sqlite3
@@ -10,6 +11,11 @@ def get(**kwargs):
     return query({k:[json.dumps(v) if k in ('filters','scoring') else str(v)] for k,v in kwargs.items()})
 
 class MovieBrowserTests(unittest.TestCase):
+    def setUp(self):
+        blocked = patch("server.blocked.read", return_value=set())
+        blocked.start()
+        self.addCleanup(blocked.stop)
+
     def test_favor_newer_years(self):
         def score(year,filters):
             component=score_components(filters,settings={'yearMode':'newer'})[0]

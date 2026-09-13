@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,7 +22,11 @@ class SeenTests(unittest.TestCase):
             self.assertEqual([r['tconst'] for r in result['rows']], ['tt0111161', 'tt1375666'])
             self.assertTrue(all(r['seen'] for r in result['rows']))
             self.assertEqual(query({'view': ['seen'], 'q': ['Inception']})['total'], 1)
+            unseen = {'q':['tt1375666'], 'filters':[json.dumps([{'field':'notSeen','op':'eq','value':True}])]}
+            self.assertEqual(query(unseen)['total'], 0)
             seen.update('tt1375666', False)
+            self.assertEqual(query(unseen)['total'], 1)
+            self.assertFalse(any(r['label']=='Not seen' for r in query(unseen)['scoreRules']))
             self.assertEqual(query({'view': ['seen']})['total'], 1)
             self.assertFalse(query({'q': ['tt1375666']})['rows'][0]['seen'])
             with self.assertRaises(ValueError): seen.update('bad-id', True)

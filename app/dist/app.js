@@ -35,6 +35,7 @@ renderColumns = () => {
  baseRenderColumns();
 };
 const FILTERS = [
+  {key:'notSeen',label:'Not seen'},
   {key:'genres',label:'Genres'},
   {key:'averageRating',label:'IMDb rating'},
   {key:'numVotes',label:'Vote count'},
@@ -42,7 +43,7 @@ const FILTERS = [
   {key:'runtimeMinutes',label:'Runtime'},
   {key:'isAdult',label:'Adult content'},
 ];
-const defaults = key => key==='genres'?{values:[],mode:'any_of'}:key==='averageRating'?{min:'',status:'any'}:key==='numVotes'?{min:''}:key==='isAdult'?{value:''}:{min:'',max:''};
+const defaults = key => key==='notSeen'?{}: key==='genres'?{values:[],mode:'any_of'}:key==='averageRating'?{min:'',status:'any'}:key==='numVotes'?{min:''}:key==='isAdult'?{value:''}:{min:'',max:''};
 const filterValues = Object.fromEntries(FILTERS.map(f=>[f.key,defaults(f.key)]));
 let filterSaving = Promise.resolve();
 function saveFilters(){
@@ -77,7 +78,9 @@ function renderFilters(){
   renderFilterPicker();
   $('filter-list').innerHTML=state.visibleFilters.map(key=>{
     const f=FILTERS.find(f=>f.key===key),v=filterValues[key];let controls='';
-    if(key==='genres'){
+    if(key==='notSeen'){
+      controls='<p class="control-hint">Movies marked as seen are hidden. Remove this filter to include them again.</p>';
+    }else if(key==='genres'){
       controls=`<label class="filter-control">Match movies with<select data-value="mode" aria-label="Genre matching"><option value="any_of" ${v.mode==='any_of'?'selected':''}>Any selected genre</option><option value="all_of" ${v.mode==='all_of'?'selected':''}>All selected genres</option></select></label><div class="genre-options" role="group" aria-label="Select genres">${meta.genres.map(g=>`<label><input type="checkbox" data-genre="${esc(g)}" ${v.values.includes(g)?'checked':''}>${esc(g)}</label>`).join('')}</div><p class="genre-summary">${v.values.length?esc(v.values.join(', ')):'All genres'}</p>`;
     }else if(key==='averageRating'){
       controls=`<label class="filter-control">Rating availability<select data-value="status" aria-label="Rating availability"><option value="any" ${v.status==='any'?'selected':''}>All movies</option><option value="rated" ${v.status==='rated'?'selected':''}>Rated movies only</option><option value="unrated" ${v.status==='unrated'?'selected':''}>Unrated movies only</option></select></label>`;
@@ -93,7 +96,8 @@ function compileFilters(){
   const filters=[];
   for(const key of state.visibleFilters){
     const v=filterValues[key];
-    if(key==='genres'){if(v.values.length)filters.push({field:key,op:v.mode,value:v.values});}
+    if(key==='notSeen')filters.push({field:key,op:'eq',value:true});
+    else if(key==='genres'){if(v.values.length)filters.push({field:key,op:v.mode,value:v.values});}
     else if(key==='isAdult'){if(v.value!=='')filters.push({field:key,op:'eq',value:v.value});}
     else if(key==='averageRating'&&v.status==='unrated')filters.push({field:key,op:'missing'});
     else{
@@ -130,7 +134,7 @@ function setFilterVisibility(key,visible){
 }
 function renderScoringSettings(){
   const settings=state.scoring;
-  $('weight-settings').innerHTML=[...FILTERS,{key:'search',label:'Title search'}].map(f=>`<label>${f.label}<input aria-label="${f.label} weight" name="weight-${f.key}" type="number" min="0" max="10" step="0.1" required value="${settings.weights[f.key]}"></label>`).join('');
+  $('weight-settings').innerHTML=[...FILTERS.filter(f=>f.key!=='notSeen'),{key:'search',label:'Title search'}].map(f=>`<label>${f.label}<input aria-label="${f.label} weight" name="weight-${f.key}" type="number" min="0" max="10" step="0.1" required value="${settings.weights[f.key]}"></label>`).join('');
   for(const key of ['genrePenalty','ratingPower','votesCap','votesScale','yearMode','runtimeMode','rangeEdgeScore'])$('scoring-form').elements[key].value=settings[key];
 }
 $('scoring-form').addEventListener('submit',e=>{
