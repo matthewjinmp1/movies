@@ -1,5 +1,6 @@
 """Transparent, deterministic SQL scoring of movies that pass the filters."""
 import math
+import enrichment
 from score_settings import validate
 
 def score_components(filters, search='', settings=None):
@@ -11,7 +12,19 @@ def score_components(filters, search='', settings=None):
     def add(key, label, sql, args, rule):
         components.append(dict(key=key, label=label, sql=sql, args=args, rule=rule, weight=settings['weights'].get(key,1)))
     for key, rules in grouped.items():
-        if key == 'genres':
+        if key in enrichment.NUMERIC:
+            spec=enrichment.NUMERIC[key]
+            if any(f['op']=='missing' for f in rules): continue
+            maximum=spec['maximum']
+            sql=f'MIN(1.0, MAX(0.0, {key} * 1.0 / {maximum}))'
+            if spec['lower']:sql='(1.0 - '+sql+')'
+            add(key,spec['label'],sql,[],f'{"Lower" if spec["lower"] else "Higher"} values score higher on a 0–{maximum:g} scale.')
+        elif key in enrichment.CATEGORIES:
+            selected=sorted({v for f in rules for v in f.get('value',[])})
+            if not selected:continue
+            sql='('+' + '.join([f'CASE WHEN EXISTS (SELECT 1 FROM json_each({key}) WHERE value=?) THEN 1.0 ELSE 0.0 END']*len(selected))+f') / {len(selected)}'
+            add(key,enrichment.CATEGORIES[key]['label'],sql,selected,'Share of selected values matched.')
+        elif key == 'genres':
             selected = sorted({g for f in rules for g in (f['value'] if f['op'] in ('any_of','all_of') else [f['value']] if f['op']=='has' else [])})
             if selected:
                 matches = '(' + ' + '.join(["CASE WHEN instr(',' || genres || ',', ?) > 0 THEN 1.0 ELSE 0.0 END"]*len(selected)) + ')'

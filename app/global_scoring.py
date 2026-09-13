@@ -1,5 +1,6 @@
 """Library-wide preference scores, independent of search and filters."""
 import copy
+import enrichment
 import hashlib
 import json
 import os
@@ -24,9 +25,19 @@ DEFAULTS = {
               for key,lo,hi,target,tolerance in [('averageRating',0,10,8,2),('numVotes',0,1000000,100000,100000),('startYear',1900,2026,2000,25),('runtimeMinutes',60,180,120,60)]},
 }
 
+LABELS.update({k:v['label'] for k,v in enrichment.NUMERIC.items()})
+NUMERIC += list(enrichment.NUMERIC)
+DEFAULTS['weights'].update({k:0 for k in enrichment.NUMERIC})
+DEFAULTS['fields'].update({k:dict(mode='lower' if v['lower'] else 'higher',scale='fixed',low=0,high=v['maximum'],target=v['maximum']/2,tolerance=v['maximum']/2) for k,v in enrichment.NUMERIC.items()})
+
 def validate(data=None):
     result=copy.deepcopy(DEFAULTS)
     if data is None: return result
+    if isinstance(data,dict) and isinstance(data.get('weights'),dict) and isinstance(data.get('fields'),dict):
+        data=copy.deepcopy(data)
+        for key in enrichment.NUMERIC:
+            data['weights'].setdefault(key,0)
+            data['fields'].setdefault(key,copy.deepcopy(DEFAULTS['fields'][key]))
     if not isinstance(data,dict) or set(data)!=set(result): raise ValueError('Invalid global scoring settings.')
     if not isinstance(data['weights'],dict) or set(data['weights'])!=set(LABELS): raise ValueError('Invalid global weights.')
     for value in data['weights'].values(): number(value,0,10)
@@ -42,9 +53,9 @@ def validate(data=None):
     for key,v in data['fields'].items():
         if not isinstance(v,dict) or set(v)!={'mode','scale','low','high','target','tolerance'}: raise ValueError('Invalid field settings.')
         if v['mode'] not in ('higher','lower','target') or v['scale'] not in ('percentile','fixed'): raise ValueError('Invalid field scoring mode.')
-        limit=10 if key=='averageRating' else 9999 if key=='startYear' else 1000000000
+        limit=enrichment.NUMERIC[key]['maximum'] if key in enrichment.NUMERIC else 10 if key=='averageRating' else 9999 if key=='startYear' else 1000000000
         for part in ('low','high','target'): number(v[part],0,limit)
-        number(v['tolerance'],0.01,1000000000)
+        number(v['tolerance'],0.01,10000000000)
         if v['low']>=v['high']: raise ValueError(f'{LABELS[key]}: low anchor must be below high anchor.')
     return copy.deepcopy(data)
 
@@ -101,7 +112,7 @@ def ensure_cache(settings,source=None):
     """Build once per settings/snapshot; atomically replace the derived cache."""
     source=source or ROOT/'movies.sqlite3'
     stamp=source.stat()
-    signature=hashlib.sha256(('rank-v1'+json.dumps(settings,sort_keys=True)+str((str(source),stamp.st_mtime_ns,stamp.st_size))).encode()).hexdigest()
+    signature=hashlib.sha256(('rank-mdb-v1'+str(enrichment.ensure().stat().st_mtime_ns)+json.dumps(settings,sort_keys=True)+str((str(source),stamp.st_mtime_ns,stamp.st_size))).encode()).hexdigest()
     cache=ROOT/'global_scores.sqlite3'
     with LOCK:
         if cache.exists():
@@ -110,6 +121,7 @@ def ensure_cache(settings,source=None):
         fd,name=tempfile.mkstemp(suffix='.sqlite3',dir=ROOT);os.close(fd)
         try:
             with closing(sqlite3.connect(f'file:{source}?mode=ro',uri=True)) as src, closing(sqlite3.connect(name)) as dst:
+                enrichment.attach(src)
                 maps={key:mapping(key,src.execute(f'SELECT {key},COUNT(*) FROM movies GROUP BY {key}').fetchall(),settings) for key in LABELS}
                 dst.execute('CREATE TABLE cache_info(signature TEXT)');dst.execute('INSERT INTO cache_info VALUES (?)',(signature,))
                 dst.execute('CREATE TABLE scores(tconst TEXT PRIMARY KEY, globalScore REAL,'+','.join('g_'+key+' REAL' for key in LABELS)+')')
@@ -119,7 +131,7 @@ def ensure_cache(settings,source=None):
                         scores=[maps[key][value] for key,value in zip(LABELS,row[1:])]
                         overall=round(sum(score*settings['weights'][key] for key,score in zip(LABELS,scores))/weight,1) if weight else None
                         yield (row[0],overall,*scores)
-                dst.executemany('INSERT INTO scores VALUES (?,?,?,?,?,?,?,?)',records())
+                dst.executemany('INSERT INTO scores VALUES ('+','.join('?' for _ in range(len(LABELS)+2))+')',records())
                 dst.execute('CREATE INDEX score_order ON scores(globalScore DESC,tconst)')
                 dst.execute('CREATE TABLE ranks AS SELECT tconst, CASE WHEN globalScore IS NOT NULL THEN RANK() OVER (ORDER BY globalScore DESC) END AS globalRank FROM scores')
                 dst.execute('CREATE UNIQUE INDEX rank_movie ON ranks(tconst)')

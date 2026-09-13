@@ -14,6 +14,7 @@ import score_settings
 import starred
 import seen
 import blocked
+import enrichment
 import global_scoring
 import chat
 import movie_runs
@@ -28,6 +29,7 @@ COLUMNS = [
     ('genres','Genres','genre'), ('isAdult','Adult','boolean'),
     ('tconst','IMDb ID','text'), ('titleType','Title type','text'), ('endYear','End year','number'),
 ]
+COLUMNS += [(s['key'],s['label'],s['kind']) for s in enrichment.SPECS]
 FIELDS = {key:kind for key,_,kind in COLUMNS}
 
 def connect(saved_ids=(), seen_ids=(), blocked_ids=()):
@@ -42,6 +44,7 @@ def connect(saved_ids=(), seen_ids=(), blocked_ids=()):
     db.executemany('INSERT INTO seen_movies VALUES (?)', ((v,) for v in seen_ids))
     db.execute('CREATE TEMP TABLE blocked_movies (tconst TEXT PRIMARY KEY)')
     db.executemany('INSERT INTO blocked_movies VALUES (?)', ((v,) for v in blocked_ids))
+    enrichment.attach(db)
     return db
 
 def conditions(search, filters):
@@ -61,7 +64,11 @@ def conditions(search, filters):
             raise ValueError('Unknown filter field.')
         key, op, value = f['field'], f.get('op'), f.get('value')
         kind = FIELDS[key]
-        if op in ['missing','present']:
+        if kind == 'category' and op in ('any_of','all_of'):
+            if not isinstance(value,list) or not value or len(value)>100 or any(not isinstance(v,str) for v in value): raise ValueError('Select valid values.')
+            clauses.append('(' + (' OR ' if op=='any_of' else ' AND ').join([f'EXISTS (SELECT 1 FROM json_each({key}) WHERE value=?)']*len(value)) + ')')
+            args.extend(value)
+        elif op in ['missing','present']:
             clauses.append(f'{key} IS '+('NOT NULL' if op=='present' else 'NULL'))
         elif kind == 'number' and op in ['eq','gte','lte']:
             try: number = float(value)
@@ -89,7 +96,7 @@ def conditions(search, filters):
     return (' WHERE '+' AND '.join(clauses) if clauses else ''), args
 
 @lru_cache(maxsize=128)
-def count_matches(search, encoded, saved_ids=None, seen_ids=None, blocked_ids=(), blocked_view=False, unseen_ids=()):
+def count_matches(search, encoded, saved_ids=None, seen_ids=None, blocked_ids=(), blocked_view=False, unseen_ids=(), enrichment_stamp=None):
     where,args = conditions(search,json.loads(encoded))
     if saved_ids is not None:
         where += (' AND ' if where else ' WHERE ') + 'tconst IN (SELECT tconst FROM saved_movies)'
@@ -122,12 +129,12 @@ def query(params):
     if sort not in FIELDS or direction not in ['asc','desc']: raise ValueError('Invalid sort.')
     size = int(params.get('size',['50'])[0])
     if size not in [25,50,100,250]: raise ValueError('Invalid page size.')
-    total = count_matches(search,json.dumps(filters,sort_keys=True),tuple(sorted(saved_ids)) if saved_view else None,tuple(sorted(seen_ids)) if seen_view else None,tuple(sorted(blocked_ids)),blocked_view,tuple(sorted(seen_ids)))
+    total = count_matches(search,json.dumps(filters,sort_keys=True),tuple(sorted(saved_ids)) if saved_view else None,tuple(sorted(seen_ids)) if seen_view else None,tuple(sorted(blocked_ids)),blocked_view,tuple(sorted(seen_ids)),enrichment.ensure().stat().st_mtime_ns)
     pages = max(1,math.ceil(total/size))
     page = max(1,min(int(params.get('page',['1'])[0]),pages))
     collation = ' COLLATE NOCASE' if FIELDS[sort] in ['text','genre'] else ''
     settings=score_settings.validate(json.loads(params.get('scoring',['null'])[0]))
-    components = score_components([f for f in filters if f['field'] != 'notSeen'], search, settings)
+    components = score_components([f for f in filters if f['field'] not in ('notSeen','mdbAvailable')], search, settings)
     extra = ''.join(f', ({c["sql"]}) AS score_{i}' for i,c in enumerate(components))
     score_args = [v for c in components for v in c['args']]
     weight=sum(c['weight'] for c in components)
@@ -143,6 +150,7 @@ def query(params):
         row['seen'] = row['tconst'] in seen_ids
         row['globalBreakdown']=[dict(label=label,weight=global_settings['weights'][key],score=round(row.pop('g_'+key),1),raw=global_scoring.utility(key,row[key],global_settings) if key=='genres' else row[key]) for key,label in global_scoring.LABELS.items()]
         row['scoreBreakdown']=[dict(label=c['label'],weight=c['weight'],score=round(100*row.pop(f'score_{i}'),1)) for i,c in enumerate(components)]
+        for key in enrichment.CATEGORIES: row[key]=json.loads(row[key]) if row[key] else []
         result.append(row)
     return dict(rows=result,total=total,page=page,pages=pages,size=size,starredCount=len(saved_ids),seenCount=len(seen_ids),blockedCount=len(blocked_ids),scoreRules=[dict(label=c['label'],rule=c['rule'],weight=c['weight']) for c in components])
 
@@ -255,6 +263,8 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == '/api/meta':
                 with closing(connect()) as db: meta = json.loads(db.execute('SELECT value FROM metadata').fetchone()[0])
                 meta['columns'] = [dict(key=k,label=l,kind=t) for k,l,t in COLUMNS]
+                meta['enrichmentFields']=enrichment.SPECS
+                meta['enrichmentOptions']=enrichment.options()
                 meta['scoringDefaults']=score_settings.validate()
                 return self.send_json(meta)
             files = {'/':('index.html','text/html'), '/app.js':('app.js','text/javascript'), '/global.js':('global.js','text/javascript'), '/chat.js':('chat.js','text/javascript'), '/styles.css':('styles.css','text/css')}

@@ -6,6 +6,7 @@ import tempfile
 import threading
 from pathlib import Path
 import score_settings
+import enrichment
 
 PATH = Path(__file__).resolve().parent / 'filters.json'
 LOCK = threading.Lock()
@@ -17,14 +18,24 @@ def validate(data):
     if not isinstance(data.get('q'),str) or len(data['q'])>500:
         raise ValueError('Search must be at most 500 characters.')
     visible=data.get('visibleFilters')
-    if not isinstance(visible,list) or len(visible)>7 or any(not isinstance(k,str) or k not in KEYS | {'notSeen'} for k in visible) or len(set(visible))!=len(visible):
+    if not isinstance(visible,list) or len(visible)>7+len(enrichment.BY_KEY) or any(not isinstance(k,str) or k not in KEYS | {'notSeen'} | set(enrichment.BY_KEY) for k in visible) or len(set(visible))!=len(visible):
         raise ValueError('Invalid visible filters.')
     values=data.get('values')
-    if not isinstance(values,dict) or set(values) not in (KEYS, KEYS | {'notSeen'}):
+    if not isinstance(values,dict) or not KEYS <= set(values) or set(values) - KEYS - {'notSeen'} - set(enrichment.BY_KEY):
         raise ValueError('Invalid filter values.')
     for key,v in values.items():
         if not isinstance(v,dict): raise ValueError('Invalid filter value.')
-        if key=='notSeen':
+        if key in enrichment.CATEGORIES:
+            if v.get('mode') not in ('any_of','all_of') or not isinstance(v.get('values'),list) or len(v['values'])>100 or any(not isinstance(x,str) or len(x)>300 for x in v['values']):raise ValueError('Invalid category choices.')
+        elif key in enrichment.NUMERIC:
+            if v.get('status') not in ('any','present','missing'):raise ValueError('Invalid availability choice.')
+            for part in ('min','max'):
+                n=v.get(part)
+                if not isinstance(n,str) or (n and (not math.isfinite(float(n)) or float(n)<0)):raise ValueError('Invalid numeric filter.')
+            if v.get('min') and v.get('max') and float(v['min'])>float(v['max']):raise ValueError('Minimum cannot exceed maximum.')
+        elif key=='mdbAvailable':
+            if v.get('value') not in ('','0','1'):raise ValueError('Invalid data availability.')
+        elif key=='notSeen':
             if v != {}: raise ValueError('Invalid not seen choice.')
         elif key=='genres':
             genres=v.get('values')

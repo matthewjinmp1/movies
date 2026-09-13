@@ -1,5 +1,6 @@
 import copy
 import math
+import enrichment
 
 DEFAULTS = {
     'weights': {key:1 for key in ['genres','averageRating','startYear','numVotes','runtimeMinutes','isAdult','search']},
@@ -11,6 +12,8 @@ DEFAULTS = {
     'runtimeMode':'center',
     'rangeEdgeScore':50,
 }
+
+DEFAULTS['weights'].update({key:1 for key in (*enrichment.NUMERIC,*enrichment.CATEGORIES)})
 
 def validate(value=None):
     result=copy.deepcopy(DEFAULTS)
