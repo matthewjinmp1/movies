@@ -148,7 +148,7 @@ def query(params):
         row['starred'] = row['tconst'] in saved_ids
         row['blocked'] = row['tconst'] in blocked_ids
         row['seen'] = row['tconst'] in seen_ids
-        row['globalBreakdown']=[dict(label=label,weight=global_settings['weights'][key],score=round(row.pop('g_'+key),1),raw=global_scoring.utility(key,row[key],global_settings) if key=='genres' else row[key]) for key,label in global_scoring.LABELS.items()]
+        row['globalBreakdown']=global_scoring.breakdown(row,global_settings)
         row['scoreBreakdown']=[dict(label=c['label'],weight=c['weight'],score=round(100*row.pop(f'score_{i}'),1)) for i,c in enumerate(components)]
         for key in enrichment.CATEGORIES: row[key]=json.loads(row[key]) if row[key] else []
         result.append(row)

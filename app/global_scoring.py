@@ -147,3 +147,26 @@ def attach(db):
         settings=read();path=ensure_cache(settings)
         db.execute('ATTACH DATABASE ? AS global_cache',(str(path),))
         return settings
+
+
+def breakdown(row, settings):
+    total=sum(settings['weights'].values())
+    result=[]
+    for key,label in LABELS.items():
+        value=row[key];score=row.pop('g_'+key);weight=settings['weights'][key]
+        raw=utility(key,value,settings) if key=='genres' else value
+        if raw is None:
+            rule=f"Missing data → configured score {settings['missingScore']:g}."
+        elif key=='genres':
+            points=', '.join(f"{g}: {settings['genrePoints'].get(g,0):g}" for g in value.split(','))
+            rule=f"Genre points ({points}); average {raw:.2f}. " + ('Percentile among known genre averages.' if settings['genreMode']=='percentile' else 'Fixed scale: (average + 10) × 5.')
+        elif key=='isAdult':rule=f"Configured score for {'adult' if value else 'non-adult'} content."
+        else:
+            field=settings['fields'][key]
+            preference={'higher':'Higher values preferred','lower':'Lower values preferred','target':f"Closest to {field['target']:g} preferred"}[field['mode']]
+            if field['scale']=='percentile':rule=preference+'; percentile among known library values (ties use their midpoint).'
+            elif field['mode']=='target':rule=f"100 × (1 − |value − {field['target']:g}| / {field['tolerance']:g}), clamped to 0–100."
+            else:rule=preference+f"; anchors {field['low']:g}–{field['high']:g}, scaled and clamped to 0–100."
+        result.append(dict(key=key,label=label,weight=weight,score=score,raw=raw,value=value,rule=rule,
+                           share=100*weight/total if total else 0,contribution=score*weight/total if total else 0))
+    return result
