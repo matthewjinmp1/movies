@@ -236,7 +236,7 @@ class Handler(BaseHTTPRequestHandler):
                 store = {'starred':starred, 'seen':seen, 'blocked':blocked}[key]
                 count = store.update(movie_id, payload.get(key))
                 return self.send_json({'saved':True, f'{key}Count':count})
-            preferences.save(payload)
+            preferences.save(payload,preferences.view_path(parse_qs(urlsplit(self.path).query).get('view',['all'])[0]))
             return self.send_json({'saved':True})
         except (ValueError,TypeError,KeyError) as error:
             return self.send_json({'error':str(error)},400)
@@ -255,7 +255,7 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == '/scorer.js':
                 return self.send_bytes((ROOT/'dist'/'scorer.js').read_bytes(),'text/javascript; charset=utf-8')
             if parsed.path == '/api/filters':
-                return self.send_json(preferences.read())
+                return self.send_json(preferences.read(preferences.view_path(parse_qs(parsed.query).get('view',['all'])[0])))
             if parsed.path == '/api/global-scoring':
                 return self.send_json({'settings':global_scoring.read(),'defaults':global_scoring.validate()})
             if parsed.path == '/api/movies':

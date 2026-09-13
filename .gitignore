@@ -23,3 +23,7 @@ app/global_scoring.json
 app/blocked.json
 
 app/mdblist_data/
+
+app/filters_starred.json
+app/filters_seen.json
+app/filters_blocked.json

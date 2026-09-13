@@ -56,6 +56,11 @@ def validate(data):
     if 'scoring' in data: result['scoring']=score_settings.validate(data['scoring'])
     return result
 
+def view_path(view='all'):
+    if view not in ('all','starred','seen','blocked'):
+        raise ValueError('Invalid movie view.')
+    return PATH if view=='all' else PATH.with_name(f'filters_{view}.json')
+
 def read(path=PATH):
     with LOCK:
         if not path.exists(): return None
