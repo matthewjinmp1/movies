@@ -29,3 +29,5 @@ app/filters_seen.json
 app/filters_blocked.json
 
 app/global_presets.json
+
+app/filter_presets.json

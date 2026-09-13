@@ -20,3 +20,5 @@
 .weight-share{color:var(--gold);font-variant-numeric:tabular-nums;font-size:12px}
 
 .global-score-button{color:var(--gold);background:transparent;border:0;padding:4px;font-weight:600}.global-score-button small{margin-left:4px;color:var(--muted)}.global-score-dialog{color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(1100px,92vw);max-height:85vh;padding:24px}.global-score-dialog::backdrop{background:#0009}.global-score-dialog form{float:right}.breakdown-scroll{overflow:auto;max-height:55vh}.global-score-dialog th{padding:12px}.global-score-dialog td{white-space:normal}.global-score-dialog td:first-child{min-width:260px;max-width:430px}.global-score-dialog td p{font-size:12px;color:var(--muted);margin:5px 0}.global-score-dialog>p{white-space:normal}
+
+.filter-presets{border-top:1px solid var(--line);padding-top:16px;margin:16px 0}.filter-presets label{display:grid;gap:5px;margin:10px 0}.filter-presets input,.filter-presets select{width:100%}.filter-presets .scoring-actions{flex-wrap:wrap;gap:6px}

@@ -17,6 +17,7 @@ import blocked
 import enrichment
 import global_scoring
 import score_presets
+import filter_presets
 import chat
 import movie_runs
 
@@ -214,7 +215,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlsplit(self.path).path
-        if path not in ('/api/filters','/api/starred','/api/seen','/api/blocked','/api/global-scoring','/api/global-presets'):
+        if path not in ('/api/filters','/api/starred','/api/seen','/api/blocked','/api/global-scoring','/api/global-presets','/api/filter-presets'):
             return self.send_json({'error':'Not found'},404)
         origin=self.headers.get('Origin')
         if origin and origin != 'http://' + self.headers.get('Host',''):
@@ -225,6 +226,9 @@ class Handler(BaseHTTPRequestHandler):
             size=int(self.headers.get('Content-Length','0'))
             if not 0<size<=16384: raise ValueError('Invalid settings size.')
             payload = json.loads(self.rfile.read(size))
+            if path == '/api/filter-presets':
+                if not isinstance(payload,dict):raise ValueError('Invalid preset.')
+                return self.send_json(filter_presets.change(payload))
             if path == '/api/global-presets':
                 if not isinstance(payload,dict):raise ValueError('Invalid preset.')
                 return self.send_json(score_presets.change(payload))
@@ -260,6 +264,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_bytes((ROOT/'dist'/'scorer.js').read_bytes(),'text/javascript; charset=utf-8')
             if parsed.path == '/api/filters':
                 return self.send_json(preferences.read(preferences.view_path(parse_qs(parsed.query).get('view',['all'])[0])))
+            if parsed.path == '/api/filter-presets':
+                return self.send_json(filter_presets.read())
             if parsed.path == '/api/global-presets':
                 return self.send_json(score_presets.read())
             if parsed.path == '/api/global-scoring':
