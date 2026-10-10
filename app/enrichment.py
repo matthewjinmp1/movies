@@ -1,5 +1,6 @@
 """Indexed local MDBList fields; never makes network requests."""
 from contextlib import closing
+from functools import lru_cache
 import json
 import math
 import os
@@ -80,5 +81,9 @@ def attach(db):
     db.execute('CREATE TEMP VIEW movies AS SELECT m.*,'+','.join(('COALESCE(e.mdbAvailable,0) AS mdbAvailable' if s['key']=='mdbAvailable' else 'e.'+s['key']) for s in SPECS)+' FROM main.movies m LEFT JOIN mdb.enrichment e USING(tconst)')
 
 def options():
-    with closing(sqlite3.connect(ensure())) as db:
+    return _options(ensure().stat().st_mtime_ns)
+
+@lru_cache(maxsize=2)
+def _options(stamp):
+    with closing(sqlite3.connect(CACHE)) as db:
         return {key:[row[0] for row in db.execute(f'SELECT DISTINCT j.value FROM enrichment,json_each(enrichment.{key}) j ORDER BY j.value COLLATE NOCASE')] for key in CATEGORIES}

@@ -112,7 +112,7 @@ def ensure_cache(settings,source=None):
     """Build once per settings/snapshot; atomically replace the derived cache."""
     source=source or ROOT/'movies.sqlite3'
     stamp=source.stat()
-    signature=hashlib.sha256(('rank-mdb-v1'+str(enrichment.ensure().stat().st_mtime_ns)+json.dumps(settings,sort_keys=True)+str((str(source),stamp.st_mtime_ns,stamp.st_size))).encode()).hexdigest()
+    signature=hashlib.sha256(('rank-mdb-v2'+str(enrichment.ensure().stat().st_mtime_ns)+json.dumps(settings,sort_keys=True)+str((str(source),stamp.st_mtime_ns,stamp.st_size))).encode()).hexdigest()
     cache=ROOT/'global_scores.sqlite3'
     with LOCK:
         if cache.exists():
@@ -135,7 +135,9 @@ def ensure_cache(settings,source=None):
                 dst.execute('CREATE INDEX score_order ON scores(globalScore DESC,tconst)')
                 dst.execute('CREATE TABLE ranks AS SELECT tconst, CASE WHEN globalScore IS NOT NULL THEN RANK() OVER (ORDER BY globalScore DESC) END AS globalRank FROM scores')
                 dst.execute('CREATE UNIQUE INDEX rank_movie ON ranks(tconst)')
-                dst.execute('CREATE INDEX rank_order ON ranks(globalRank,tconst)');dst.commit()
+                dst.execute('CREATE INDEX rank_order ON ranks(globalRank,tconst)')
+                # Statistics let SQLite page through the rank indexes instead of sorting every movie.
+                dst.execute('ANALYZE');dst.commit()
             os.replace(name,cache)
         finally:
             if os.path.exists(name): os.unlink(name)

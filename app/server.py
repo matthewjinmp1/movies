@@ -97,6 +97,11 @@ def conditions(search, filters):
             raise ValueError('Invalid filter operator or value.')
     return (' WHERE '+' AND '.join(clauses) if clauses else ''), args
 
+@lru_cache(maxsize=4)
+def library_size(stamp):
+    with closing(sqlite3.connect(f'file:{ROOT / "movies.sqlite3"}?mode=ro', uri=True)) as db:
+        return db.execute('SELECT COUNT(*) FROM movies').fetchone()[0]
+
 @lru_cache(maxsize=128)
 def count_matches(search, encoded, saved_ids=None, seen_ids=None, blocked_ids=(), blocked_view=False, unseen_ids=(), enrichment_stamp=None):
     where,args = conditions(search,json.loads(encoded))
@@ -135,6 +140,12 @@ def query(params):
     pages = max(1,math.ceil(total/size))
     page = max(1,min(int(params.get('page',['1'])[0]),pages))
     collation = ' COLLATE NOCASE' if FIELDS[sort] in ['text','genre'] else ''
+    order, source = sort, 'movies JOIN global_cache.scores USING(tconst) JOIN global_cache.ranks USING(tconst)'
+    if sort in ('globalScore','globalRank'):
+        # Walking the global ordering index is fast unless it must skip many non-matching movies; sparse matches are cheaper to sort.
+        if page*size*(library_size((ROOT/'movies.sqlite3').stat().st_mtime_ns)-total) > 100000*max(total,1): order = '+'+sort
+        elif sort == 'globalScore': source = 'global_cache.scores CROSS JOIN movies USING(tconst) JOIN global_cache.ranks USING(tconst)'
+        else: source = 'global_cache.ranks CROSS JOIN movies USING(tconst) JOIN global_cache.scores USING(tconst)'
     settings=score_settings.validate(json.loads(params.get('scoring',['null'])[0]))
     components = score_components([f for f in filters if f['field'] not in ('notSeen','mdbAvailable')], search, settings)
     extra = ''.join(f', ({c["sql"]}) AS score_{i}' for i,c in enumerate(components))
@@ -143,7 +154,7 @@ def query(params):
     score = 'ROUND(100.0 * (' + ' + '.join(f'score_{i} * {c["weight"]}' for i,c in enumerate(components)) + f') / {weight}, 1)' if weight else 'NULL'
     with closing(connect(saved_ids if saved_view else (), seen_ids, blocked_ids)) as db:
         global_settings=global_scoring.attach(db)
-        rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM movies JOIN global_cache.scores USING(tconst) JOIN global_cache.ranks USING(tconst){where}) ORDER BY {sort}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
+        rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM {source}{where}) ORDER BY {order}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
     result=[]
     for record in rows:
         row=dict(record)
