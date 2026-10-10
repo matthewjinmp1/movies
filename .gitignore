@@ -22,6 +22,7 @@ app/global_scoring.json
 .DS_Store
 
 app/blocked.json
+app/ratings.json
 
 app/mdblist_data/
 

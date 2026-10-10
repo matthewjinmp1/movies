@@ -18,6 +18,7 @@ import score_settings
 import starred
 import seen
 import blocked
+import ratings
 import enrichment
 import global_scoring
 import score_presets
@@ -29,7 +30,7 @@ ROOT = Path(__file__).resolve().parent
 COLUMNS = [
     ('globalScore','Global score','number'),
     ('globalRank','Global rank','number'),
-    ('primaryTitle','Title','text'), ('filterScore','Filter score','number'), ('originalTitle','Original title','text'),
+    ('primaryTitle','Title','text'), ('myRating','My rating','number'), ('filterScore','Filter score','number'), ('originalTitle','Original title','text'),
     ('startYear','Year','number'), ('averageRating','IMDb rating','number'),
     ('numVotes','Votes','number'), ('runtimeMinutes','Runtime (min)','number'),
     ('genres','Genres','genre'), ('isAdult','Adult','boolean'),
@@ -38,7 +39,7 @@ COLUMNS = [
 COLUMNS += [(s['key'],s['label'],s['kind']) for s in enrichment.SPECS]
 FIELDS = {key:kind for key,_,kind in COLUMNS}
 
-def connect(saved_ids=(), seen_ids=(), blocked_ids=()):
+def connect(saved_ids=(), seen_ids=(), blocked_ids=(), my_ratings=None):
     db = sqlite3.connect(f'file:{ROOT / "movies.sqlite3"}?mode=ro', uri=True)
     db.row_factory = sqlite3.Row
     db.create_function('CASEFOLD', 1, lambda s: s.casefold() if s is not None else None, deterministic=True)
@@ -50,6 +51,8 @@ def connect(saved_ids=(), seen_ids=(), blocked_ids=()):
     db.executemany('INSERT INTO seen_movies VALUES (?)', ((v,) for v in seen_ids))
     db.execute('CREATE TEMP TABLE blocked_movies (tconst TEXT PRIMARY KEY)')
     db.executemany('INSERT INTO blocked_movies VALUES (?)', ((v,) for v in blocked_ids))
+    db.execute('CREATE TEMP TABLE my_ratings (tconst TEXT PRIMARY KEY, myRating REAL)')
+    db.executemany('INSERT INTO my_ratings VALUES (?,?)', (my_ratings or {}).items())
     enrichment.attach(db)
     return db
 
@@ -66,7 +69,7 @@ def conditions(search, filters):
                 raise ValueError('Invalid not seen filter.')
             clauses.append('tconst NOT IN (SELECT tconst FROM seen_movies)')
             continue
-        if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore','globalRank'):
+        if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore','globalRank','myRating'):
             raise ValueError('Unknown filter field.')
         key, op, value = f['field'], f.get('op'), f.get('value')
         kind = FIELDS[key]
@@ -124,6 +127,7 @@ def query(params):
     saved_ids = starred.read()
     seen_ids = seen.read()
     blocked_ids = blocked.read()
+    my_ratings = ratings.read()
     view = params.get('view',['all'])[0]
     if view not in ('all', 'starred', 'seen', 'blocked'):
         raise ValueError('Invalid movie view.')
@@ -150,13 +154,14 @@ def query(params):
         if page*size*(library_size((ROOT/'movies.sqlite3').stat().st_mtime_ns)-total) > 100000*max(total,1): order = '+'+sort
         elif sort == 'globalScore': source = 'global_cache.scores CROSS JOIN movies USING(tconst) JOIN global_cache.ranks USING(tconst)'
         else: source = 'global_cache.ranks CROSS JOIN movies USING(tconst) JOIN global_cache.scores USING(tconst)'
+    source += ' LEFT JOIN my_ratings USING(tconst)'
     settings=score_settings.validate(json.loads(params.get('scoring',['null'])[0]))
     components = score_components([f for f in filters if f['field'] not in ('notSeen','mdbAvailable')], search, settings)
     extra = ''.join(f', ({c["sql"]}) AS score_{i}' for i,c in enumerate(components))
     score_args = [v for c in components for v in c['args']]
     weight=sum(c['weight'] for c in components)
     score = 'ROUND(100.0 * (' + ' + '.join(f'score_{i} * {c["weight"]}' for i,c in enumerate(components)) + f') / {weight}, 1)' if weight else 'NULL'
-    with closing(connect(saved_ids if saved_view else (), seen_ids, blocked_ids)) as db:
+    with closing(connect(saved_ids if saved_view else (), seen_ids, blocked_ids, my_ratings)) as db:
         global_settings=global_scoring.attach(db)
         rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM {source}{where}) ORDER BY {order}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
     result=[]
@@ -230,7 +235,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlsplit(self.path).path
-        if path not in ('/api/filters','/api/starred','/api/seen','/api/blocked','/api/global-scoring','/api/global-presets','/api/filter-presets'):
+        if path not in ('/api/filters','/api/starred','/api/seen','/api/blocked','/api/ratings','/api/global-scoring','/api/global-presets','/api/filter-presets'):
             return self.send_json({'error':'Not found'},404)
         origin=self.headers.get('Origin')
         if origin and origin != 'http://' + self.headers.get('Host',''):
@@ -249,12 +254,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(score_presets.change(payload))
             if path == '/api/global-scoring':
                 return self.send_json({'settings':global_scoring.save(payload),'saved':True})
-            if path in ('/api/starred', '/api/seen', '/api/blocked'):
+            if path in ('/api/starred', '/api/seen', '/api/blocked', '/api/ratings'):
                 if not isinstance(payload,dict): raise ValueError('Invalid selection.')
                 movie_id = payload.get('tconst')
                 with closing(connect()) as db:
                     if not isinstance(movie_id,str) or not db.execute('SELECT 1 FROM movies WHERE tconst=?',(movie_id,)).fetchone():
                         raise ValueError('Movie not found.')
+                if path == '/api/ratings':
+                    return self.send_json({'saved':True, 'ratedCount':ratings.update(movie_id, payload.get('rating'))})
                 key = path.rsplit('/', 1)[1]
                 store = {'starred':starred, 'seen':seen, 'blocked':blocked}[key]
                 count = store.update(movie_id, payload.get(key))
