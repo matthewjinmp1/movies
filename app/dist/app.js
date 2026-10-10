@@ -273,10 +273,11 @@ function columnEdgeAt(e){
  const r=cell.getBoundingClientRect();
  return e.clientX>r.right-7?state.columns[cell.cellIndex]:e.clientX<r.left+5&&state.columns[cell.cellIndex-1]||null;
 }
-function markColumnEdge(key){
- if(key===edgeColumn)return;
- edgeColumn=key;const index=state.columns.indexOf(key);
- columnEdgeSheet.replaceSync(index<0?'':`#movies-table tr>:nth-child(${index+1}){box-shadow:inset -2px 0 0 var(--gold)}#movies-table tbody{cursor:col-resize}`);
+// Hovering an edge only changes the cursor; a faint guide line appears while resizing.
+function markColumnEdge(key,resizing=false){
+ const mark=key&&`${key}:${resizing}`;if(mark===edgeColumn)return;
+ edgeColumn=mark;const index=state.columns.indexOf(key);
+ columnEdgeSheet.replaceSync(index<0?'':'#movies-table tbody{cursor:col-resize}'+(resizing?`#movies-table tr>:nth-child(${index+1}){box-shadow:inset -1px 0 0 #59606b}`:''));
 }
 $('movies-table').addEventListener('pointermove',e=>{if(!columnResize&&!columnDrag?.active)markColumnEdge(columnEdgeAt(e));});
 $('movies-table').addEventListener('pointerleave',()=>{if(!columnResize)markColumnEdge(null);});
@@ -284,7 +285,7 @@ $('movies-table').addEventListener('pointerdown',e=>{
  const key=columnEdgeAt(e);
  if(!key||e.button!==0||!e.isPrimary)return;
  e.preventDefault();
- markColumnEdge(key);document.body.classList.add('column-resizing');
+ markColumnEdge(key,true);document.body.classList.add('column-resizing');
  columnResize={key,startX:e.clientX,startWidth:$('movies-table').querySelector(`thead th[data-column="${key}"]`).getBoundingClientRect().width,previous:columnWidths[key],moved:false};
 });
 document.addEventListener('pointermove',e=>{
