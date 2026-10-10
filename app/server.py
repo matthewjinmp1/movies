@@ -3,6 +3,10 @@ import argparse
 import json
 import math
 import sqlite3
+import subprocess
+import sys
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -312,6 +316,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'self'; base-uri 'none'")
         self.end_headers(); self.wfile.write(data)
 
+def start_mdblist_schedule():
+    """Fill each day's MDBList quota in the background while the app runs."""
+    def check():
+        while True:
+            # The downloader exits right away when today's quota is used or another download is running.
+            with open(ROOT/'mdblist_daily.log','a') as log:
+                subprocess.run([sys.executable, str(ROOT/'fetch_mdblist.py'), '--daily'], cwd=ROOT.parent, stdout=log, stderr=subprocess.STDOUT)
+            time.sleep(60*60)
+    threading.Thread(target=check, daemon=True).start()
+
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(); parser.add_argument('--port',type=int,default=3002); options=parser.parse_args()
     if not (ROOT/'movies.sqlite3').exists():
@@ -319,4 +333,5 @@ if __name__ == '__main__':
         build()
     server=ThreadingHTTPServer(('127.0.0.1',options.port),Handler)
     print(f'Movie browser: http://127.0.0.1:{options.port}',flush=True)
+    start_mdblist_schedule()
     server.serve_forever()

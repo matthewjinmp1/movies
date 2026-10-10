@@ -5,7 +5,7 @@ import threading
 import urllib.request
 import webbrowser
 
-from server import ROOT, Handler, ThreadingHTTPServer
+from server import ROOT, Handler, ThreadingHTTPServer, start_mdblist_schedule
 
 URL = 'http://localhost:3002/'
 
@@ -33,6 +33,7 @@ def main():
             build()
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
+        start_mdblist_schedule()
         print(f'Movie browser: {URL}\nKeep this window open. Press Control+C to stop.', flush=True)
         if not options.no_browser:
             webbrowser.open(URL)
