@@ -29,4 +29,4 @@
 
 #movies-table th button{overflow:hidden;text-overflow:ellipsis}.column-resizer{position:absolute;top:0;right:0;bottom:0;width:9px;cursor:col-resize;touch-action:none;z-index:2}.column-resizer::after{content:'';position:absolute;top:28%;bottom:28%;right:3px;width:2px;border-radius:1px;background:transparent}#movies-table th:hover .column-resizer::after{background:#4a505a}#movies-table th .column-resizer:hover::after{background:var(--gold)}body.column-resizing,body.column-resizing *{cursor:col-resize!important;-webkit-user-select:none;user-select:none}
 
-.my-rating{width:72px;min-height:34px;padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;font-size:14px}.my-rating::placeholder{color:#656e7c}.my-rating.saved{border-color:#5d7f5a}.my-rating.invalid{border-color:#c46a6a}
+.my-rating{width:60px;min-height:34px;padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;font-size:14px}.my-rating::placeholder{color:#656e7c}.my-rating.saved{border-color:#5d7f5a}.my-rating.invalid{border-color:#c46a6a}

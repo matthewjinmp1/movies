@@ -51,7 +51,7 @@ def connect(saved_ids=(), seen_ids=(), blocked_ids=(), my_ratings=None):
     db.executemany('INSERT INTO seen_movies VALUES (?)', ((v,) for v in seen_ids))
     db.execute('CREATE TEMP TABLE blocked_movies (tconst TEXT PRIMARY KEY)')
     db.executemany('INSERT INTO blocked_movies VALUES (?)', ((v,) for v in blocked_ids))
-    db.execute('CREATE TEMP TABLE my_ratings (tconst TEXT PRIMARY KEY, myRating REAL)')
+    db.execute('CREATE TEMP TABLE my_ratings (tconst TEXT PRIMARY KEY, myRating INTEGER)')
     db.executemany('INSERT INTO my_ratings VALUES (?,?)', (my_ratings or {}).items())
     enrichment.attach(db)
     return db

@@ -369,19 +369,19 @@ $('movies-table').addEventListener('click',async e=>{
  }catch(error){$('error').textContent='Could not save blocked status: '+error.message;$('error').hidden=false;button.disabled=false;}
 });
 const cellBeforeRating=cell;
-cell=(row,key)=>key==='myRating'?`<input class="my-rating" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="—" data-rating="${esc(row.tconst)}" value="${row.myRating??''}" aria-label="Your rating for ${esc(row.primaryTitle)}, 0 to 100">`:cellBeforeRating(row,key);
+cell=(row,key)=>key==='myRating'?`<input class="my-rating" type="number" min="0" max="10" step="1" inputmode="numeric" placeholder="—" data-rating="${esc(row.tconst)}" value="${row.myRating??''}" aria-label="Your rating for ${esc(row.primaryTitle)}, 0 to 10">`:cellBeforeRating(row,key);
 const renderTableBeforeRatings=renderTable;
-renderTable=()=>{renderTableBeforeRatings();for(const input of document.querySelectorAll('[data-rating]'))input.closest('td').title='Your rating, 0–100. Leave blank to clear.';};
+renderTable=()=>{renderTableBeforeRatings();for(const input of document.querySelectorAll('[data-rating]'))input.closest('td').title='Your rating, 0–10. Leave blank to clear.';};
 $('movies-table').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-rating]'))e.target.blur();});
 $('movies-table').addEventListener('change',async e=>{
  const input=e.target.closest('[data-rating]');if(!input)return;
  const rating=input.value.trim()===''?null:Number(input.value),movie=data?.rows.find(r=>r.tconst===input.dataset.rating);
- if(input.validity.badInput||rating!==null&&!(rating>=0&&rating<=100)){input.value=movie?.myRating??'';$('status').textContent='Enter a rating from 0 to 100.';input.classList.remove('saved');input.classList.add('invalid');return;}
+ if(input.validity.badInput||rating!==null&&!(Number.isInteger(rating)&&rating>=0&&rating<=10)){input.value=movie?.myRating??'';$('status').textContent='Enter a whole number from 0 to 10.';input.classList.remove('saved');input.classList.add('invalid');return;}
  input.classList.remove('invalid','saved');
  try{
   const response=await fetch('/api/ratings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tconst:input.dataset.rating,rating})});
   const result=await response.json();if(!response.ok)throw new Error(result.error);
-  if(movie)movie.myRating=rating===null?null:Math.round(rating*10)/10;
+  if(movie)movie.myRating=rating;
   input.value=movie?.myRating??'';input.classList.add('saved');setTimeout(()=>input.classList.remove('saved'),1500);$('status').textContent=rating===null?'Rating cleared.':`Rating saved: ${input.value}.`;
  }catch(error){$('error').textContent='Could not save rating: '+error.message;$('error').hidden=false;}
 });

@@ -1,4 +1,4 @@
-"""Atomic local storage for personal 0–100 movie ratings."""
+"""Atomic local storage for personal 0–10 movie ratings."""
 import json
 import math
 import os
@@ -12,7 +12,7 @@ LOCK = threading.RLock()
 
 
 def valid(value):
-    return type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 100
+    return type(value) in (int, float) and math.isfinite(value) and value == int(value) and 0 <= value <= 10
 
 
 def read(path=None):
@@ -27,16 +27,16 @@ def read(path=None):
 
 
 def update(movie_id, rating, path=None):
-    """Set a rating, or remove it when rating is None. Ratings keep one decimal place."""
+    """Set a whole-number rating, or remove it when rating is None."""
     path = path or PATH
     if not isinstance(movie_id, str) or not re.fullmatch(r'tt[0-9]+', movie_id) or not (rating is None or valid(rating)):
-        raise ValueError('Enter a rating from 0 to 100.')
+        raise ValueError('Enter a whole-number rating from 0 to 10.')
     with LOCK:
         data = read(path)
         if rating is None:
             data.pop(movie_id, None)
         else:
-            data[movie_id] = round(float(rating), 1)
+            data[movie_id] = int(rating)
         name = None
         try:
             with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as f:
