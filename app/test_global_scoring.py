@@ -34,6 +34,7 @@ class GlobalScoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):g.save(s)
             self.assertEqual(g.read()['weights']['genres'],1)
 
+    @patch('blocked.read',lambda path=None:set())
     def test_global_ranking_independent_of_filters(self):
         result=query({'sort':['globalScore'],'direction':['desc']})
         values=[row['globalScore'] for row in result['rows']]
