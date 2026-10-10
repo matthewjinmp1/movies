@@ -59,6 +59,7 @@ The app joins all 756,513 movie records with ratings by IMDb ID, including 348,2
 - Drag the right edge of a column, in the header or on any row, to make that column wider or narrower; the pointer changes to a resize cursor over an edge; text that no longer fits ends with …. Escape cancels a resize, and double-clicking the edge returns the column to its automatic width. Widths are saved in this browser, and Reset in Columns clears them.
 - In Columns, use the left/right arrows next to a visible column to change its table position. The menu lists visible columns in table order, and the order is saved in this browser. Reset restores the default columns and order.
 - Click any column header or choose a field in Sort to sort ascending or descending. Missing values always sort last.
+- Filters and saved filter presets live in the **Filters** tab, so the movie table can use the full width. The search box stays above the table. Filter changes apply to the movie list (All, Starred, Seen, or Blocked) selected on the Movies tab.
 - Search by primary title, original title, or IMDb ID.
 - Use Choose filters to show or hide custom controls for genres, IMDb rating, vote count, release year, runtime, and adult content. Hiding a control removes its condition.
 - Select multiple genres and match any or all selected genres. Other active filters are combined with AND.

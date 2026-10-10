@@ -385,6 +385,8 @@ $('movies-table').addEventListener('change',async e=>{
   input.value=movie?.myRating??'';input.classList.add('saved');setTimeout(()=>input.classList.remove('saved'),1500);$('status').textContent=rating===null?'Rating cleared.':`Rating saved: ${input.value}.`;
  }catch(error){$('error').textContent='Could not save rating: '+error.message;$('error').hidden=false;}
 });
+const renderFiltersBeforeNote=renderFilters;
+renderFilters=()=>{renderFiltersBeforeNote();$('filters-view-note').textContent=`Editing filters for ${{all:'All movies',starred:'Starred',seen:'Seen',blocked:'Blocked'}[state.view]}. Each movie list keeps its own filters.`;};
 init();
 
 const globalScoreDialog=document.createElement('dialog');
