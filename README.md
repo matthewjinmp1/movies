@@ -73,6 +73,8 @@ The app joins all 756,513 movie records with ratings by IMDb ID, including 348,2
 
 Run integration checks with `python3 -m unittest discover -s app -p 'test_*.py'`.
 
+Run `python3 count_lines.py` to count lines of code in Git-tracked files by language (add `--files` for a per-file list).
+
 ### AI scoring runs and movie lists
 
 Open **AI scoring** for a workflow modeled on ai_stock_scorer's list manager, run setup, and saved rankings.
