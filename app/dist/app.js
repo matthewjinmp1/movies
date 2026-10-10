@@ -197,7 +197,7 @@ $('column-options').addEventListener('click',e=>{
  $('status').textContent=`${meta.columns.find(c=>c.key===key).label} moved to column ${next+1} of ${state.columns.length}.`;
 });
 $('reset-columns').onclick=()=>{state.columns=[...DEFAULT_COLUMNS];columnWidths={};persist();renderColumns();renderTable();};
-let columnDrag=null,suppressHeaderClick=false;
+let columnDrag=null,suppressTableClick=false;
 const columnGhost=document.createElement('div');columnGhost.className='column-drag-ghost';columnGhost.hidden=true;document.body.append(columnGhost);
 const columnHeaders=()=>[...$('movies-table').querySelectorAll('thead th[data-column]')];
 function clearColumnDropMarks(){for(const th of columnHeaders())th.classList.remove('column-dragged','drop-before','drop-after');}
@@ -222,7 +222,7 @@ function autoScrollColumns(time){
 }
 function stopColumnDragFeedback(){cancelAnimationFrame(columnDrag.frame);columnGhost.hidden=true;document.body.classList.remove('column-dragging');clearColumnDropMarks();}
 $('movies-table').addEventListener('pointerdown',e=>{
- suppressHeaderClick=false;
+ suppressTableClick=false;
  const th=e.target.closest('thead th[data-column]');
  if(!th||e.target.closest('.column-resizer')||e.button!==0||!e.isPrimary||e.pointerType==='touch')return;
  columnDrag={key:th.dataset.column,startX:e.clientX,x:e.clientX,index:0,frame:0,active:false,cancelled:false};
@@ -243,7 +243,7 @@ function endColumnDrag(e){
  if(!columnDrag)return;
  const drag=columnDrag;stopColumnDragFeedback();columnDrag=null;
  if(!drag.active)return;
- suppressHeaderClick=true;setTimeout(()=>{suppressHeaderClick=false;});
+ suppressTableClick=true;setTimeout(()=>{suppressTableClick=false;});
  if(drag.cancelled||e.type==='pointercancel')return;
  const from=state.columns.indexOf(drag.key);let to=drag.index;
  if(from<0||to===from||to===from+1)return;
@@ -255,7 +255,7 @@ function endColumnDrag(e){
 document.addEventListener('pointerup',endColumnDrag);
 document.addEventListener('pointercancel',endColumnDrag);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&columnDrag?.active&&!columnDrag.cancelled){columnDrag.cancelled=true;stopColumnDragFeedback();}});
-$('movies-table').addEventListener('click',e=>{if(suppressHeaderClick&&e.target.closest('thead')){e.stopImmediatePropagation();e.preventDefault();suppressHeaderClick=false;}},true);
+$('movies-table').addEventListener('click',e=>{if(suppressTableClick){e.stopImmediatePropagation();e.preventDefault();suppressTableClick=false;}},true);
 const columnWidthSheet=new CSSStyleSheet();document.adoptedStyleSheets=[...document.adoptedStyleSheets,columnWidthSheet];
 const clampColumnWidth=width=>Math.round(Math.min(1200,Math.max(40,width)));
 try{const saved=JSON.parse(localStorage.getItem('frame-preferences'))?.columnWidths;if(saved&&typeof saved==='object')for(const [key,width] of Object.entries(saved))if(Number.isFinite(width))columnWidths[key]=clampColumnWidth(width);}catch{}
@@ -263,33 +263,49 @@ function applyColumnWidths(){
  columnWidthSheet.replaceSync(state.columns.map((key,i)=>columnWidths[key]?`#movies-table tr>:nth-child(${i+1}){width:${columnWidths[key]}px;min-width:${columnWidths[key]}px;max-width:${columnWidths[key]}px;overflow:hidden;text-overflow:ellipsis}`:'').join('\n'));
 }
 const renderTableBeforeWidths=renderTable;
-renderTable=()=>{renderTableBeforeWidths();applyColumnWidths();};
-let columnResize=null;
+renderTable=()=>{renderTableBeforeWidths();applyColumnWidths();markColumnEdge(null);};
+const columnEdgeSheet=new CSSStyleSheet();document.adoptedStyleSheets=[...document.adoptedStyleSheets,columnEdgeSheet];
+let columnResize=null,edgeColumn=null;
+// Every column edge can be dragged, not only the header handle, so columns can be resized anywhere in a long table.
+function columnEdgeAt(e){
+ const handle=e.target.closest('.column-resizer');if(handle)return handle.dataset.resizeColumn;
+ const cell=e.pointerType!=='touch'&&e.target.closest('#movies-table tbody td');if(!cell)return null;
+ const r=cell.getBoundingClientRect();
+ return e.clientX>r.right-7?state.columns[cell.cellIndex]:e.clientX<r.left+5&&state.columns[cell.cellIndex-1]||null;
+}
+function markColumnEdge(key){
+ if(key===edgeColumn)return;
+ edgeColumn=key;const index=state.columns.indexOf(key);
+ columnEdgeSheet.replaceSync(index<0?'':`#movies-table tr>:nth-child(${index+1}){box-shadow:inset -2px 0 0 var(--gold)}#movies-table tbody{cursor:col-resize}`);
+}
+$('movies-table').addEventListener('pointermove',e=>{if(!columnResize&&!columnDrag?.active)markColumnEdge(columnEdgeAt(e));});
+$('movies-table').addEventListener('pointerleave',()=>{if(!columnResize)markColumnEdge(null);});
 $('movies-table').addEventListener('pointerdown',e=>{
- const handle=e.target.closest('.column-resizer');
- if(!handle||e.button!==0||!e.isPrimary)return;
+ const key=columnEdgeAt(e);
+ if(!key||e.button!==0||!e.isPrimary)return;
  e.preventDefault();
- const key=handle.dataset.resizeColumn;
- columnResize={key,startX:e.clientX,startWidth:handle.closest('th').getBoundingClientRect().width,previous:columnWidths[key]};
- document.body.classList.add('column-resizing');
+ markColumnEdge(key);document.body.classList.add('column-resizing');
+ columnResize={key,startX:e.clientX,startWidth:$('movies-table').querySelector(`thead th[data-column="${key}"]`).getBoundingClientRect().width,previous:columnWidths[key],moved:false};
 });
 document.addEventListener('pointermove',e=>{
- if(!columnResize)return;
- columnWidths[columnResize.key]=clampColumnWidth(columnResize.startWidth+e.clientX-columnResize.startX);applyColumnWidths();
+ if(!columnResize||!columnResize.moved&&e.clientX===columnResize.startX)return;
+ columnResize.moved=true;columnWidths[columnResize.key]=clampColumnWidth(columnResize.startWidth+e.clientX-columnResize.startX);applyColumnWidths();
 });
 function restoreColumnWidth(resize){if(resize.previous)columnWidths[resize.key]=resize.previous;else delete columnWidths[resize.key];applyColumnWidths();}
+function stopColumnResize(){columnResize=null;document.body.classList.remove('column-resizing');markColumnEdge(null);}
 function endColumnResize(e){
  if(!columnResize)return;
- const resize=columnResize;columnResize=null;document.body.classList.remove('column-resizing');
- suppressHeaderClick=true;setTimeout(()=>{suppressHeaderClick=false;});
+ const resize=columnResize;stopColumnResize();
+ if(!resize.moved)return;
+ suppressTableClick=true;setTimeout(()=>{suppressTableClick=false;});
  if(e.type==='pointercancel')restoreColumnWidth(resize);else persist();
 }
 document.addEventListener('pointerup',endColumnResize);
 document.addEventListener('pointercancel',endColumnResize);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&columnResize){restoreColumnWidth(columnResize);columnResize=null;document.body.classList.remove('column-resizing');}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&columnResize){restoreColumnWidth(columnResize);stopColumnResize();}});
 $('movies-table').addEventListener('dblclick',e=>{
- const handle=e.target.closest('.column-resizer');if(!handle)return;
- delete columnWidths[handle.dataset.resizeColumn];applyColumnWidths();persist();
+ const key=columnEdgeAt(e);if(!key)return;
+ delete columnWidths[key];applyColumnWidths();persist();
 });
 $('filters-button').onclick=()=>{const open=$('filters-menu').hidden;$('filters-menu').hidden=!open;$('filters-button').setAttribute('aria-expanded',String(open));};
 document.addEventListener('click',e=>{if(!e.target.closest('.filter-picker-wrap')){$('filters-menu').hidden=true;$('filters-button').setAttribute('aria-expanded','false');}});
