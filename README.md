@@ -56,6 +56,7 @@ The app joins all 756,513 movie records with ratings by IMDb ID, including 348,2
 
 - Use Columns to toggle any of the 11 source fields. At least one remains visible.
 - Drag any column header left or right to move that column; a gold bar marks where it will land. Dragging near the table edge scrolls it, and Escape cancels the drag. A plain click on a header still sorts. The new order is saved in this browser like other column changes.
+- Drag the right edge of a column header to make that column wider or narrower; text that no longer fits ends with …. Escape cancels a resize, and double-clicking the edge returns the column to its automatic width. Widths are saved in this browser, and Reset in Columns clears them.
 - In Columns, use the left/right arrows next to a visible column to change its table position. The menu lists visible columns in table order, and the order is saved in this browser. Reset restores the default columns and order.
 - Click any column header or choose a field in Sort to sort ascending or descending. Missing values always sort last.
 - Search by primary title, original title, or IMDb ID.
