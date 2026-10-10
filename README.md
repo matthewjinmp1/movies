@@ -55,6 +55,7 @@ The Chat tab uses the OpenRouter chat-completions API with `deepseek/deepseek-v4
 The app joins all 756,513 movie records with ratings by IMDb ID, including 348,202 movies with ratings. It preserves unrated movies and keeps the original downloaded files unchanged.
 
 - Use Columns to toggle any of the 11 source fields. At least one remains visible.
+- Drag any column header left or right to move that column; a gold bar marks where it will land. Dragging near the table edge scrolls it, and Escape cancels the drag. A plain click on a header still sorts. The new order is saved in this browser like other column changes.
 - In Columns, use the left/right arrows next to a visible column to change its table position. The menu lists visible columns in table order, and the order is saved in this browser. Reset restores the default columns and order.
 - Click any column header or choose a field in Sort to sort ascending or descending. Missing values always sort last.
 - Search by primary title, original title, or IMDb ID.
