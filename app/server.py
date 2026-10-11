@@ -19,6 +19,7 @@ import starred
 import seen
 import blocked
 import ratings
+import personal_model
 import enrichment
 import global_scoring
 import score_presets
@@ -30,7 +31,7 @@ ROOT = Path(__file__).resolve().parent
 COLUMNS = [
     ('globalScore','Global score','number'),
     ('globalRank','Global rank','number'),
-    ('primaryTitle','Title','text'), ('myRating','My rating','number'), ('filterScore','Filter score','number'), ('originalTitle','Original title','text'),
+    ('primaryTitle','Title','text'), ('myRating','My rating','number'), ('predictedRating','Predicted rating','number'), ('filterScore','Filter score','number'), ('originalTitle','Original title','text'),
     ('startYear','Year','number'), ('averageRating','IMDb rating','number'),
     ('numVotes','Votes','number'), ('runtimeMinutes','Runtime (min)','number'),
     ('genres','Genres','genre'), ('isAdult','Adult','boolean'),
@@ -69,7 +70,7 @@ def conditions(search, filters):
                 raise ValueError('Invalid not seen filter.')
             clauses.append('tconst NOT IN (SELECT tconst FROM seen_movies)')
             continue
-        if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore','globalRank','myRating'):
+        if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore','globalRank','myRating','predictedRating'):
             raise ValueError('Unknown filter field.')
         key, op, value = f['field'], f.get('op'), f.get('value')
         kind = FIELDS[key]
@@ -154,7 +155,7 @@ def query(params):
         if page*size*(library_size((ROOT/'movies.sqlite3').stat().st_mtime_ns)-total) > 100000*max(total,1): order = '+'+sort
         elif sort == 'globalScore': source = 'global_cache.scores CROSS JOIN movies USING(tconst) JOIN global_cache.ranks USING(tconst)'
         else: source = 'global_cache.ranks CROSS JOIN movies USING(tconst) JOIN global_cache.scores USING(tconst)'
-    source += ' LEFT JOIN my_ratings USING(tconst)'
+    source += ' LEFT JOIN my_ratings USING(tconst) LEFT JOIN personal_cache.predictions USING(tconst)'
     settings=score_settings.validate(json.loads(params.get('scoring',['null'])[0]))
     components = score_components([f for f in filters if f['field'] not in ('notSeen','mdbAvailable')], search, settings)
     extra = ''.join(f', ({c["sql"]}) AS score_{i}' for i,c in enumerate(components))
@@ -163,6 +164,12 @@ def query(params):
     score = 'ROUND(100.0 * (' + ' + '.join(f'score_{i} * {c["weight"]}' for i,c in enumerate(components)) + f') / {weight}, 1)' if weight else 'NULL'
     with closing(connect(saved_ids if saved_view else (), seen_ids, blocked_ids, my_ratings)) as db:
         global_settings=global_scoring.attach(db)
+        prediction=personal_model.attach(db)
+        if sort == 'predictedRating':
+            # Predicted movies sort ahead of unpredicted ones in both directions, so their pages can walk the prediction index.
+            if page*size <= db.execute(f'SELECT COUNT(*) FROM personal_cache.predictions CROSS JOIN movies USING(tconst){where}',args).fetchone()[0]:
+                source = 'personal_cache.predictions CROSS JOIN movies USING(tconst) JOIN global_cache.scores USING(tconst) JOIN global_cache.ranks USING(tconst) LEFT JOIN my_ratings USING(tconst)'
+            else: order = '+'+sort
         rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM {source}{where}) ORDER BY {order}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
     result=[]
     for record in rows:
@@ -174,7 +181,7 @@ def query(params):
         row['scoreBreakdown']=[dict(label=c['label'],weight=c['weight'],score=round(100*row.pop(f'score_{i}'),1)) for i,c in enumerate(components)]
         for key in enrichment.CATEGORIES: row[key]=json.loads(row[key]) if row[key] else []
         result.append(row)
-    return dict(rows=result,total=total,page=page,pages=pages,size=size,starredCount=len(saved_ids),seenCount=len(seen_ids),blockedCount=len(blocked_ids),scoreRules=[dict(label=c['label'],rule=c['rule'],weight=c['weight']) for c in components])
+    return dict(rows=result,total=total,page=page,pages=pages,size=size,starredCount=len(saved_ids),seenCount=len(seen_ids),blockedCount=len(blocked_ids),prediction=prediction,scoreRules=[dict(label=c['label'],rule=c['rule'],weight=c['weight']) for c in components])
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):

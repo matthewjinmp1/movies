@@ -110,6 +110,10 @@ Genre averages and numeric preferences can use library-wide percentiles: 100 × 
 
 The overall score is the weighted mean of field scores. Zero-weight fields have no effect; all weights zero gives a blank score. Defaults weight rating 3, genres/votes/year 1, and runtime/adult 0. Genre points start at 0. Click a Global score for its breakdown. The Save & apply, Rank by global score, and Restore default controls buttons sit at the top of the settings and stay pinned while you scroll through them. Save & apply persists to `app/global_scoring.json`; Rank by global score sorts using the saved settings. The derived `app/global_scores.sqlite3` cache rebuilds when settings or the movie snapshot change. No external requests are needed.
 
+### Predicted rating
+
+The **Predicted rating** column estimates your 0–10 rating for movies with at least 10,000 IMDb votes, learned from your ratings in My rating (at least 5 are needed). It starts from crowd quality, fixed at half a point per IMDb point above or below the average of movies you rated, because your ratings cover only well-reviewed movies. Ridge regression then learns how each genre and the Metacritic score shift your ratings, choosing its smoothing by leave-one-out error. Open **How predicted rating works** above the table for the learned effects and accuracy: each rated movie is predicted with itself left out and compared with always guessing your average. Predictions are cached in the Git-ignored `app/personal_scores.sqlite3` and rebuilt when your ratings or the movie data change. Sort by the column to find unseen movies you are likely to enjoy; predictions get better as you rate more movies.
+
 ### Blocked movies
 
 Use the Block column to hide movies from All movies, Starred, and Seen. Open the Blocked tab to review and unblock them; current filters also apply there. Blocking preserves stars and seen status. Choices are saved locally in `app/blocked.json`, which is excluded from Git.
