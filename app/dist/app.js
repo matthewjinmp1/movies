@@ -402,6 +402,16 @@ ${p.metacriticEffect===null?'':`<li><strong>Metacritic:</strong> ${signed(p.meta
 }
 const renderTableBeforePrediction=renderTable;
 renderTable=()=>{renderTableBeforePrediction();if(data?.prediction)renderPrediction(data.prediction);};
+$('column-options').insertAdjacentHTML('beforebegin','<div class="column-search"><input type="search" id="column-search" placeholder="Search columns…" aria-label="Search columns" autocomplete="off"><p id="column-no-match" class="muted" hidden>No columns match.</p></div>');
+function filterColumnOptions(){
+ const query=$('column-search').value.trim().toLowerCase();let shown=0;
+ for(const option of $('column-options').querySelectorAll('.column-option')){const match=!query||option.querySelector('label').textContent.toLowerCase().includes(query);option.hidden=!match;shown+=match;}
+ $('column-no-match').hidden=shown>0;
+}
+const renderColumnsBeforeSearch=renderColumns;
+renderColumns=()=>{renderColumnsBeforeSearch();filterColumnOptions();};
+$('column-search').addEventListener('input',filterColumnOptions);
+$('columns-button').addEventListener('click',()=>{if(!$('columns-menu').hidden)$('column-search').focus();});
 init();
 
 const globalScoreDialog=document.createElement('dialog');

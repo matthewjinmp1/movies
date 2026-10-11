@@ -54,7 +54,7 @@ The Chat tab uses the OpenRouter chat-completions API with `deepseek/deepseek-v4
 
 The app joins all 756,513 movie records with ratings by IMDb ID, including 348,202 movies with ratings. It preserves unrated movies and keeps the original downloaded files unchanged.
 
-- Use Columns to toggle any of the 11 source fields. At least one remains visible.
+- Use Columns to toggle any column; type in its search box to find columns by name. At least one remains visible.
 - Drag any column header left or right to move that column; a gold bar marks where it will land. Dragging near the table edge scrolls it, and Escape cancels the drag. A plain click on a header still sorts. The new order is saved in this browser like other column changes.
 - Drag the right edge of a column, in the header or on any row, to make that column wider or narrower; the pointer changes to a resize cursor over an edge; text that no longer fits ends with …. Escape cancels a resize, and double-clicking the edge returns the column to its automatic width. Widths are saved in this browser, and Reset in Columns clears them.
 - In Columns, use the left/right arrows next to a visible column to change its table position. The menu lists visible columns in table order, and the order is saved in this browser. Reset restores the default columns and order.
