@@ -114,6 +114,10 @@ The overall score is the weighted mean of field scores. Zero-weight fields have 
 
 The **Predicted rating** column estimates your 0–10 rating for movies with at least 10,000 IMDb votes, learned from your ratings in My rating (at least 5 are needed). It starts from crowd quality, fixed at half a point per IMDb point above or below the average of movies you rated, because your ratings cover only well-reviewed movies. Ridge regression then learns how each genre and the Metacritic score shift your ratings, choosing its smoothing by leave-one-out error. Open **How predicted rating works** above the table for the learned effects and accuracy: each rated movie is predicted with itself left out and compared with always guessing your average. Predictions are cached in the Git-ignored `app/personal_scores.sqlite3` and rebuilt when your ratings or the movie data change. Sort by the column to find unseen movies you are likely to enjoy; predictions get better as you rate more movies.
 
+### Ratings vs. movie stats
+
+Open **How your ratings relate to movie stats** above the table to see how your My rating scores correlate with every numeric stat (IMDb and MDBList ratings, vote counts, year, runtime, money, content levels, global score), each genre, and common certifications, languages, countries, and production companies. Stats are listed by Spearman rank correlation, with Pearson (on logarithms for counts and money), the number of movies with data, a p-value, and an Evidence label that applies a Benjamini–Hochberg false-discovery-rate check because many stats are tested at once. Keywords are excluded because hundreds would be tested, so many would correlate by chance. Values are recalculated each time you open the panel.
+
 ### Blocked movies
 
 Use the Block column to hide movies from All movies, Starred, and Seen. Open the Blocked tab to review and unblock them; current filters also apply there. Blocking preserves stars and seen status. Choices are saved locally in `app/blocked.json`, which is excluded from Git.

@@ -414,6 +414,20 @@ const renderColumnsBeforeSearch=renderColumns;
 renderColumns=()=>{renderColumnsBeforeSearch();filterColumnOptions();};
 $('column-search').addEventListener('input',filterColumnOptions);
 $('columns-button').addEventListener('click',()=>{if(!$('columns-menu').hidden)$('column-search').focus();});
+function renderInsights(result){
+ if(result.ratings<5){$('rating-insights').innerHTML=`<p>Rate at least 5 movies in My rating to see correlations. You have rated ${result.ratings}.</p>`;return;}
+ const chance=Math.tanh(1.96*Math.sqrt(1.06/(result.ratings-3))),signed=v=>(v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(2);
+ const evidence=s=>s.q<0.1?'Likely real':s.p<0.05?'Possible, could be chance':'Unclear';
+ $('rating-insights').innerHTML=`<p>Spearman correlation between your ${result.ratings} ratings and each stat, strongest first. Positive means you tend to rate movies higher when the stat is higher (or when a movie has that genre or label); negative means lower. With ${result.ratings} ratings, correlations within about ±${chance.toFixed(2)} can easily be chance, and testing ${result.tested} stats at once makes a few chance hits likely, so Evidence uses a false-discovery-rate check. Pearson uses the logarithm of vote counts and money. Keywords are left out because hundreds would be tested.</p>
+<div class="insights-scroll"><table class="insights-table"><thead><tr><th>Stat</th><th>Correlation</th><th class="numeric">Pearson</th><th class="numeric">Movies</th><th class="numeric">p</th><th>Evidence</th></tr></thead><tbody>${result.stats.map(s=>`<tr><td>${esc(s.label)} <small>${esc(s.group)}</small></td><td><span class="corr-value">${signed(s.spearman)}</span><span class="corr-track"><span class="corr-fill${s.spearman<0?' negative':''}" data-correlation="${s.spearman}"></span></span></td><td class="numeric">${signed(s.pearson)}</td><td class="numeric">${s.movies}</td><td class="numeric">${s.p<0.001?'<0.001':s.p.toFixed(3)}</td><td>${evidence(s)}</td></tr>`).join('')}</tbody></table></div>`;
+ for(const fill of $('rating-insights').querySelectorAll('[data-correlation]')){const v=Number(fill.dataset.correlation);fill.style.width=`${Math.abs(v)*50}%`;fill.style[v<0?'right':'left']='50%';}
+}
+$('insights-help').addEventListener('toggle',async e=>{
+ if(!e.target.open)return;
+ $('rating-insights').innerHTML='<p class="muted">Calculating…</p>';
+ try{const response=await fetch('/api/rating-insights');const result=await response.json();if(!response.ok)throw new Error(result.error);renderInsights(result);}
+ catch(error){$('rating-insights').innerHTML=`<p>Could not calculate correlations: ${esc(error.message)}</p>`;}
+});
 init();
 
 const globalScoreDialog=document.createElement('dialog');

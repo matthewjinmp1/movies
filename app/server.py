@@ -20,6 +20,7 @@ import seen
 import blocked
 import ratings
 import personal_model
+import rating_insights
 import enrichment
 import global_scoring
 import score_presets
@@ -299,6 +300,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(score_presets.read())
             if parsed.path == '/api/global-scoring':
                 return self.send_json({'settings':global_scoring.read(),'defaults':global_scoring.validate()})
+            if parsed.path == '/api/rating-insights':
+                with closing(connect(my_ratings=ratings.read())) as db:
+                    global_scoring.attach(db)
+                    return self.send_json(rating_insights.correlations(db, COLUMNS))
             if parsed.path == '/api/movies':
                 return self.send_json(query(parse_qs(parsed.query)))
             if parsed.path == '/api/meta':

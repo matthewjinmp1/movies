@@ -36,3 +36,5 @@
 .column-search{position:sticky;top:-14px;z-index:1;background:#20242a;margin:0 -14px;padding:10px 14px 8px}.column-search input{font-size:14px;min-height:36px}.column-search p{margin:8px 0 0;font-size:13px}.column-option[hidden]{display:none}
 
 .mdb-text[open] .mdb-preview,.mdb-text:not([open]) .mdb-full{display:none}
+
+.insights-scroll{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:8px;max-width:900px}.insights-table{font-size:13px}.insights-table th{position:sticky;top:0;padding:10px 12px}.insights-table td{padding:8px 12px;height:auto;color:var(--text)}.insights-table td small{color:var(--muted);margin-left:6px}.corr-value{display:inline-block;width:46px;text-align:right;font-variant-numeric:tabular-nums;margin-right:10px}.corr-track{display:inline-block;position:relative;width:120px;height:8px;border-radius:4px;background:#2b2e35;vertical-align:middle}.corr-fill{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--gold)}.corr-fill.negative{background:#c46a6a}
