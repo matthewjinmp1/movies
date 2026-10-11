@@ -431,6 +431,11 @@ new MutationObserver(async()=>{
 }).observe($('insights-panel'),{attributes:true,attributeFilter:['hidden']});
 // Ranking from the Global score tab shows the result on the Movies tab.
 $('global-rank').addEventListener('click',()=>{location.hash='library';});
+// Only one expandable cell (plot, list, or score breakdown) stays open at a time.
+$('movies-table').addEventListener('toggle',e=>{
+ if(e.target.tagName!=='DETAILS'||!e.target.open)return;
+ for(const other of $('movies-table').querySelectorAll('details[open]'))if(other!==e.target)other.open=false;
+},true);
 init();
 
 const globalScoreDialog=document.createElement('dialog');
