@@ -422,12 +422,15 @@ function renderInsights(result){
 <div class="insights-scroll"><table class="insights-table"><thead><tr><th>Stat</th><th>Correlation</th><th class="numeric">Pearson</th><th class="numeric">Movies</th><th class="numeric">p</th><th>Evidence</th></tr></thead><tbody>${result.stats.map(s=>`<tr><td>${esc(s.label)} <small>${esc(s.group)}</small></td><td><span class="corr-value">${signed(s.spearman)}</span><span class="corr-track"><span class="corr-fill${s.spearman<0?' negative':''}" data-correlation="${s.spearman}"></span></span></td><td class="numeric">${signed(s.pearson)}</td><td class="numeric">${s.movies}</td><td class="numeric">${s.p<0.001?'<0.001':s.p.toFixed(3)}</td><td>${evidence(s)}</td></tr>`).join('')}</tbody></table></div>`;
  for(const fill of $('rating-insights').querySelectorAll('[data-correlation]')){const v=Number(fill.dataset.correlation);fill.style.width=`${Math.abs(v)*50}%`;fill.style[v<0?'right':'left']='50%';}
 }
-$('insights-help').addEventListener('toggle',async e=>{
- if(!e.target.open)return;
+// Correlations are recalculated whenever the Insights tab is shown, however it was opened.
+new MutationObserver(async()=>{
+ if($('insights-panel').hidden)return;
  $('rating-insights').innerHTML='<p class="muted">Calculating…</p>';
  try{const response=await fetch('/api/rating-insights');const result=await response.json();if(!response.ok)throw new Error(result.error);renderInsights(result);}
  catch(error){$('rating-insights').innerHTML=`<p>Could not calculate correlations: ${esc(error.message)}</p>`;}
-});
+}).observe($('insights-panel'),{attributes:true,attributeFilter:['hidden']});
+// Ranking from the Global score tab shows the result on the Movies tab.
+$('global-rank').addEventListener('click',()=>{location.hash='library';});
 init();
 
 const globalScoreDialog=document.createElement('dialog');

@@ -38,3 +38,5 @@
 .mdb-text[open] .mdb-preview,.mdb-text:not([open]) .mdb-full{display:none}
 
 .insights-scroll{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:8px;max-width:900px}.insights-table{font-size:13px}.insights-table th{position:sticky;top:0;padding:10px 12px}.insights-table td{padding:8px 12px;height:auto;color:var(--text)}.insights-table td small{color:var(--muted);margin-left:6px}.corr-value{display:inline-block;width:46px;text-align:right;font-variant-numeric:tabular-nums;margin-right:10px}.corr-track{display:inline-block;position:relative;width:120px;height:8px;border-radius:4px;background:#2b2e35;vertical-align:middle}.corr-fill{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--gold)}.corr-fill.negative{background:#c46a6a}
+
+.tab-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;margin-top:16px}.tab-card>h2{font-size:18px;color:var(--text);margin:0 0 10px}#global-panel .tab-card,#insights-panel .tab-card{max-width:1400px}
