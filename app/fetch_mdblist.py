@@ -22,6 +22,9 @@ DIRECTORY = Path(__file__).resolve().parent / 'mdblist_data'
 VOTE_TIERS = (100000, 50000, 25000, 10000, 5000, 1000)
 
 
+# The daily download leaves this many requests a day for the Movie Search app's on-open lookups.
+RESERVE = 50
+
 def save(path, value):
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2)+'\n')
@@ -87,6 +90,8 @@ def main():
     parser.add_argument('--add', type=int, default=0, help='Add this many unseen movies not yet selected, biggest vote band first.')
     parser.add_argument('--min-votes', type=int, default=VOTE_TIERS[-1], help='Smallest IMDb vote count for movies added with --add.')
     parser.add_argument('--daily', action='store_true', help="Use the rest of today's MDBList quota, adding movies as needed.")
+    parser.add_argument('--reserve', type=int, default=RESERVE,
+                        help="With --daily, leave this many of today's requests unused (for the Movie Search app's lookups).")
     args = parser.parse_args()
     chat.load_local_env()
     key = os.environ.get('MDBList_KEY')
@@ -109,9 +114,10 @@ def main():
 def download(args, key):
     print(f'{datetime.datetime.now().isoformat(timespec="seconds")}: starting MDBList download.', flush=True)
     if args.daily:
-        args.max_requests = remaining_quota(key)
+        left = remaining_quota(key)
+        args.max_requests = left - max(args.reserve, 0)
         if args.max_requests <= 0:
-            print('No MDBList requests remain today.', flush=True)
+            print(f'No MDBList requests to spare today ({left} left, {args.reserve} kept for Movie Search).', flush=True)
             return
     incoming = DIRECTORY / 'incoming'
     publish(incoming)

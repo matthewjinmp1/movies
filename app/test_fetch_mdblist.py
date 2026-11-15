@@ -48,6 +48,19 @@ class DownloadTests(unittest.TestCase):
             self.assertTrue((root/'tt2.json').exists())
             self.assertEqual(run(root, []), (0,0))
 
+    def test_daily_run_leaves_the_reserve_unused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(run(root, [reply({'rate_limit_remaining':fetch.RESERVE})], ['--daily']), (1,0))
+
+    def test_daily_run_uses_only_what_is_above_the_reserve(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fetch.save(root/'selection.json', {'movies':[{'tconst':f'tt{i}','primaryTitle':'Test'} for i in (101, 102, 103)]})
+            ok = lambda tt: reply({'ids':{'imdb':tt},'ratings':[{'source':'tomatoes','value':80}]})
+            calls, _ = run(root, [reply({'rate_limit_remaining':fetch.RESERVE + 2}), ok('tt101'), ok('tt102')], ['--daily'])
+            self.assertEqual(calls, 3)
+
     def test_daily_run_stops_when_quota_is_used(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
