@@ -41,4 +41,5 @@
 
 .tab-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;margin-top:16px}.tab-card>h2{font-size:18px;color:var(--text);margin:0 0 10px}#global-panel .tab-card,#insights-panel .tab-card{max-width:1400px}
 
-.title-poster{width:30px;height:45px;object-fit:cover;border-radius:3px;flex:none;background:#272c34;display:inline-block}
+.title-poster{width:56px;height:84px;object-fit:cover;border-radius:3px;flex:none;background:#272c34;display:inline-block}
+td.poster-cell{padding-top:4px;padding-bottom:4px;width:1%}td.poster-cell a{display:block;line-height:0}
