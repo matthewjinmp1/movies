@@ -274,8 +274,16 @@ class Handler(BaseHTTPRequestHandler):
                 store = {'starred':starred, 'seen':seen, 'blocked':blocked}[key]
                 count = store.update(movie_id, payload.get(key))
                 return self.send_json({'saved':True, f'{key}Count':count})
-            preferences.save(payload,preferences.view_path(parse_qs(urlsplit(self.path).query).get('view',['all'])[0]))
-            return self.send_json({'saved':True})
+            path=preferences.view_path(parse_qs(urlsplit(self.path).query).get('view',['all'])[0])
+            base=payload.get('baseRev')
+            if not isinstance(base,int) or isinstance(base,bool):
+                # Pages loaded before revisions existed can't tell whether they are stale, so they may not save.
+                current,rev=preferences.read_rev(path)
+                return self.send_json({'error':'Reload the page to save filters.','conflict':True,'settings':current,'rev':rev},409)
+            try:
+                return self.send_json({'saved':True,'rev':preferences.save(payload,path,base_rev=base)})
+            except preferences.Conflict as conflict:
+                return self.send_json({'error':str(conflict),'conflict':True,'settings':conflict.current,'rev':conflict.rev},409)
         except (ValueError,TypeError,KeyError) as error:
             return self.send_json({'error':str(error)},400)
         except OSError:
@@ -293,7 +301,8 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == '/scorer.js':
                 return self.send_bytes((ROOT/'dist'/'scorer.js').read_bytes(),'text/javascript; charset=utf-8')
             if parsed.path == '/api/filters':
-                return self.send_json(preferences.read(preferences.view_path(parse_qs(parsed.query).get('view',['all'])[0])))
+                current,rev=preferences.read_rev(preferences.view_path(parse_qs(parsed.query).get('view',['all'])[0]))
+                return self.send_json(current and {**current,'rev':rev})
             if parsed.path == '/api/filter-presets':
                 return self.send_json(filter_presets.read())
             if parsed.path == '/api/global-presets':

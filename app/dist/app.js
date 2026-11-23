@@ -61,18 +61,30 @@ const defaults = key => enrichmentSpec(key)?.kind==='category'?{values:[],mode:'
 const filterValues = Object.fromEntries(FILTERS.map(f=>[f.key,defaults(f.key)]));
 let filterSaving = Promise.resolve();
 const filterProfiles={};
+// Each tab's saved filters carry a revision. A save names the revision it started from, and the server
+// refuses it if the filters were changed since (e.g. in another window), so an old page can't wipe them.
+const filterRevs={}, filterConflicts={};
 let filterProfilesLoaded=false;
+function adoptFilterProfile(view,settings,rev){
+  filterProfiles[view]=settings;filterRevs[view]=rev||0;filterConflicts[view]=(filterConflicts[view]||0)+1;
+  if(view!==state.view)return;
+  useFilterProfile(view);renderFilters();renderScoringSettings();refresh();
+}
 function saveFilters(){
-  const view=state.view;
-  const payload=JSON.stringify({version:1,q:state.q,visibleFilters:state.visibleFilters,values:filterValues,scoring:state.scoring});
-  filterProfiles[view]=JSON.parse(payload);
+  const view=state.view, gen=filterConflicts[view]||0;
+  const settings={version:1,q:state.q,visibleFilters:state.visibleFilters,values:filterValues,scoring:state.scoring};
+  filterProfiles[view]=JSON.parse(JSON.stringify(settings));
   $('filter-save-status').textContent='Saving filters…';
   filterSaving=filterSaving.catch(()=>{}).then(async()=>{
-    const response=await fetch('/api/filters?view='+encodeURIComponent(view),{method:'PUT',headers:{'Content-Type':'application/json'},body:payload,keepalive:true});
+    if((filterConflicts[view]||0)!==gen)return 'stale'; // newer filters were loaded since this change
+    const response=await fetch('/api/filters?view='+encodeURIComponent(view),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...settings,baseRev:filterRevs[view]||0}),keepalive:true});
+    const body=await response.json().catch(()=>({}));
+    if(response.status===409&&body.conflict){adoptFilterProfile(view,body.settings,body.rev);return 'conflict';}
     if(!response.ok)throw new Error('Save failed');
+    filterRevs[view]=body.rev;
   });
   const current=filterSaving;
-  current.then(()=>{if(current===filterSaving)$('filter-save-status').textContent='Filters saved on this computer';}).catch(()=>{if(current===filterSaving)$('filter-save-status').textContent='Could not save filters. Change a filter to retry.';});
+  current.then(r=>{if(current===filterSaving)$('filter-save-status').textContent=r==='conflict'?'These filters were changed in another window, so that version was kept.':'Filters saved on this computer';}).catch(()=>{if(current===filterSaving)$('filter-save-status').textContent='Could not save filters. Change a filter to retry.';});
 }
 function useFilterProfile(view){
   const saved=filterProfiles[view];
@@ -82,14 +94,29 @@ function useFilterProfile(view){
   state.filters=compileFilters();$('search').value=state.q;
   $('filter-save-status').textContent='Filters saved separately for each movie tab';
 }
+async function fetchFilterProfile(view){
+  const response=await fetch('/api/filters?view='+view);
+  if(!response.ok)throw new Error('Could not restore saved filters.');
+  const saved=await response.json();
+  return {settings:saved,rev:saved?.rev||0};
+}
 async function restoreFilters(){
   await Promise.all(['all','starred','seen','blocked'].map(async view=>{
-    const response=await fetch('/api/filters?view='+view);
-    if(!response.ok)throw new Error('Could not restore saved filters.');
-    filterProfiles[view]=await response.json();
+    const {settings,rev}=await fetchFilterProfile(view);
+    filterProfiles[view]=settings;filterRevs[view]=rev;
   }));
   filterProfilesLoaded=true;useFilterProfile(state.view);
 }
+// Coming back to this window: pick up filters changed in another window rather than keep a stale copy.
+async function syncFilterProfiles(){
+  if(!filterProfilesLoaded||document.hidden)return;
+  await filterSaving.catch(()=>{});
+  for(const view of ['all','starred','seen','blocked']){
+    try{const {settings,rev}=await fetchFilterProfile(view);if(rev>(filterRevs[view]||0))adoptFilterProfile(view,settings,rev);}catch{}
+  }
+}
+document.addEventListener('visibilitychange',syncFilterProfiles);
+window.addEventListener('focus',syncFilterProfiles);
 function renderFilterPicker(){
   $('filter-options').innerHTML=FILTERS.map(f=>`<label><input type="checkbox" value="${f.key}" ${state.visibleFilters.includes(f.key)?'checked':''}>${f.label}</label>`).join('');
   $('filter-picker-count').textContent=state.visibleFilters.length;

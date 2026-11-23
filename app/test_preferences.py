@@ -34,4 +34,18 @@ class PreferenceTests(unittest.TestCase):
             self.assertEqual(read(path)['scoring']['weights']['genres'],3)
             self.assertEqual(read(path)['scoring']['genrePenalty'],2)
 
+    def test_stale_save_is_refused_and_history_kept(self):
+        base=dict(version=1,q='',visibleFilters=[],values={'genres':dict(values=[],mode='any_of'),'averageRating':dict(min='',status='any'),
+            'numVotes':dict(min=''),'startYear':dict(min='',max=''),'runtimeMinutes':dict(min='',max=''),'isAdult':dict(value='')})
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'filters_starred.json'
+            seen={**base,'visibleFilters':['notSeen'],'values':{**base['values'],'notSeen':{}}}
+            self.assertEqual(save(seen,path,base_rev=0),1)
+            with self.assertRaises(preferences.Conflict) as caught: save(base,path,base_rev=0)  # an old window
+            self.assertEqual(caught.exception.rev,1)
+            self.assertEqual(read(path)['visibleFilters'],['notSeen'])
+            self.assertEqual(save(base,path,base_rev=1),2)
+            self.assertEqual(preferences.read_rev(path)[1],2)
+            self.assertEqual(len(preferences.history_path(path).read_text().splitlines()),2)
+
 if __name__=='__main__': unittest.main()
