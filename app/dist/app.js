@@ -515,7 +515,12 @@ document.addEventListener('error',e=>{if(e.target.matches?.('img.title-poster'))
   const frame=$('movie-search-frame');if(!frame)return;
   // The page's markup nests later panels inside the library panel; move this one beside the chat panel.
   document.addEventListener('DOMContentLoaded',()=>{const panel=$('search-panel'),chat=$('chat-panel');if(chat&&!chat.contains(panel))chat.after(panel);});
-  const show=url=>{if(url)frame.src=url;else if(!frame.getAttribute('src'))frame.src=frame.dataset.base;$('movie-search-new').href=url||frame.dataset.base;};
+  // Load a movie by replacing the frame's page rather than adding to history, so Back returns to the table.
+  const show=url=>{
+    if(!frame.getAttribute('src'))frame.src=url||frame.dataset.base;
+    else if(url)try{frame.contentWindow.location.replace(url);}catch{frame.src=url;}
+    $('movie-search-new').href=url||frame.dataset.base;
+  };
   if(location.hash==='#search')show();
   window.addEventListener('hashchange',()=>{if(location.hash==='#search')show();});
   document.addEventListener('click',e=>{
