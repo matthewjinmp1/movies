@@ -341,7 +341,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length',str(len(data)))
         self.send_header('Cache-Control','no-store')
         self.send_header('X-Content-Type-Options','nosniff')
-        self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: https://image.tmdb.org; style-src 'self'; script-src 'self'; frame-ancestors 'self'; base-uri 'none'")
+        self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: https://image.tmdb.org; style-src 'self'; script-src 'self'; frame-src http://localhost:3017 http://127.0.0.1:3017; frame-ancestors 'self'; base-uri 'none'")
         self.end_headers(); self.wfile.write(data)
 
 def start_mdblist_schedule():
