@@ -1,4 +1,18 @@
 let globalSettings, globalDefaults;
+// The Scores tab edits one of two independent scores; the choice is remembered.
+let scoreKind=(()=>{try{return localStorage.getItem('frame-score-kind')==='quality'?'quality':'global';}catch{return 'global';}})();
+const scoreName=()=>scoreKind==='quality'?'quality':'global';
+const scoreColumn=()=>scoreKind==='quality'?'qualityScore':'globalScore';
+function labelScoreKind(){
+ const Name=scoreKind==='quality'?'Quality':'Global',name=scoreName();
+ $('score-title').textContent=Name+' score';$('score-settings-title').textContent=Name+' score settings';
+ $('global-save').textContent=`Save & apply ${name} scoring`;$('global-rank').textContent=`Rank by ${name} score`;
+ document.querySelectorAll('.score-kinds [data-score-kind]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.scoreKind===scoreKind)));
+}
+async function loadScoreKind(){
+ const response=await fetch('/api/global-scoring?kind='+scoreKind);const result=await response.json();if(!response.ok)throw new Error(result.error);
+ globalSettings=result.settings;globalDefaults=result.defaults;labelScoreKind();renderGlobalSettings();
+}
 const GLOBAL_FIELDS={genres:'Genres',averageRating:'IMDb rating',numVotes:'Vote count',startYear:'Release year',runtimeMinutes:'Runtime',isAdult:'Adult content'};
 const globalNumber=(name,label,value,min,max,step='0.1')=>`<label>${label}<input name="${name}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" required></label>`;
 function renderGlobalSettings(){
@@ -29,21 +43,27 @@ function updateGlobalControls(){
  }
 }
 async function initGlobalSettings(){
- const response=await fetch('/api/global-scoring');const result=await response.json();if(!response.ok)throw new Error(result.error);
- globalSettings=result.settings;globalDefaults=result.defaults;for(const f of meta.enrichmentFields||[])if(f.kind==='number')GLOBAL_FIELDS[f.key]=f.label;renderGlobalSettings();
+ for(const f of meta.enrichmentFields||[])if(f.kind==='number')GLOBAL_FIELDS[f.key]=f.label;
+ await loadScoreKind();
+ document.querySelector('.score-kinds').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-score-kind]');if(!b||b.dataset.scoreKind===scoreKind)return;
+  scoreKind=b.dataset.scoreKind;try{localStorage.setItem('frame-score-kind',scoreKind);}catch{}
+  $('global-status').textContent='';
+  try{await loadScoreKind();}catch(error){$('global-status').textContent='Could not load settings: '+error.message;}
+ });
  await initGlobalPresets();
  $('global-form').addEventListener('change',updateGlobalControls);
  $('global-weights').addEventListener('input',updateWeightShares);
  $('global-reset').onclick=()=>{globalSettings=structuredClone(globalDefaults);renderGlobalSettings();$('global-status').textContent='Default controls restored. Save to apply.';};
- $('global-rank').onclick=()=>{state.sort='globalScore';state.direction='desc';if(!state.columns.includes('globalScore'))state.columns.splice(1,0,'globalScore');renderColumns();syncSort();refresh();};
+ $('global-rank').onclick=()=>{const col=scoreColumn();state.sort=col;state.direction='desc';if(!state.columns.includes(col))state.columns.splice(1,0,col);renderColumns();syncSort();refresh();};
  $('global-form').addEventListener('submit',async event=>{
   event.preventDefault();const form=event.currentTarget;if(!form.reportValidity())return;
   const next=readGlobalControls();
   const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);$('global-status').textContent='Saving and recalculating the full library…';
   try{
-   const response=await fetch('/api/global-scoring',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(next)});
+   const response=await fetch('/api/global-scoring?kind='+scoreKind,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(next)});
    const result=await response.json();if(!response.ok)throw new Error(result.error);
-   globalSettings=result.settings;clearTimeout(debounce);await load();$('global-status').textContent=$('error').hidden?'Saved on this computer. Global scores updated.':'Settings saved; reload to finish loading scores.';
+   globalSettings=result.settings;clearTimeout(debounce);await load();$('global-status').textContent=$('error').hidden?`Saved on this computer. ${scoreKind==='quality'?'Quality':'Global'} scores updated.`:'Settings saved; reload to finish loading scores.';
   }catch(error){$('global-status').textContent='Could not apply settings: '+error.message;}
   finally{buttons.forEach(b=>b.disabled=false);}
  });
@@ -62,13 +82,13 @@ function readGlobalControls(){
 
 async function initGlobalPresets(){
  const container=document.createElement('section');container.className='preset-controls';
- container.innerHTML=`<h3>Saved scoring presets</h3><div class="scoring-actions"><label>Preset<select id="global-preset-select"></select></label><button type="button" id="global-preset-load">Load settings</button><label>Preset name<input id="global-preset-name" maxlength="100" placeholder="e.g. Thriller night"></label><button type="button" id="global-preset-save">Save as new</button><button type="button" id="global-preset-update">Update selected</button><button type="button" id="global-preset-delete">Delete selected</button></div><p class="muted">Save as new captures the controls below. Loading fills the controls; use Save &amp; apply global scoring to update the rankings. Editing controls never changes a preset unless you update it.</p><p id="global-preset-status" role="status"></p>`;
+ container.innerHTML=`<h3>Saved scoring presets</h3><div class="scoring-actions"><label>Preset<select id="global-preset-select"></select></label><button type="button" id="global-preset-load">Load settings</button><label>Preset name<input id="global-preset-name" maxlength="100" placeholder="e.g. Thriller night"></label><button type="button" id="global-preset-save">Save as new</button><button type="button" id="global-preset-update">Update selected</button><button type="button" id="global-preset-delete">Delete selected</button></div><p class="muted">Save as new captures the controls below. Loading fills the controls; presets work for either score; use Save &amp; apply to update the rankings. Editing controls never changes a preset unless you update it.</p><p id="global-preset-status" role="status"></p>`;
  $('global-form').before(container);
  let presets=[];
  async function request(payload){const response=await fetch('/api/global-presets',payload?{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}:undefined);const result=await response.json();if(!response.ok)throw Error(result.error||'Could not load presets.');return result;}
  function render(selected=''){ $('global-preset-select').innerHTML='<option value="">Choose a preset</option>'+presets.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');$('global-preset-select').value=selected;}
  $('global-preset-select').onchange=()=>{const p=presets.find(p=>p.id===$('global-preset-select').value);if(p)$('global-preset-name').value=p.name;};
- $('global-preset-load').onclick=()=>{const p=presets.find(p=>p.id===$('global-preset-select').value);if(!p){$('global-preset-status').textContent='Choose a preset first.';return;}globalSettings=structuredClone(p.settings);renderGlobalSettings();$('global-preset-status').textContent=`Loaded ${p.name}. Save & apply global scoring to update rankings.`;};
+ $('global-preset-load').onclick=()=>{const p=presets.find(p=>p.id===$('global-preset-select').value);if(!p){$('global-preset-status').textContent='Choose a preset first.';return;}globalSettings=structuredClone(p.settings);renderGlobalSettings();$('global-preset-status').textContent=`Loaded ${p.name}. Save & apply to update rankings.`;};
  for(const action of ['save','update','delete'])$('global-preset-'+action).onclick=async()=>{
   const id=$('global-preset-select').value;if(action!=='save'&&!id){$('global-preset-status').textContent='Choose a preset first.';return;}
   if(action!=='delete'&&!$('global-form').reportValidity())return;

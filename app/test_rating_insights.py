@@ -24,6 +24,7 @@ class RatingInsightTests(unittest.TestCase):
                 ratings.update(movie, rating)
             with closing(connect(my_ratings=ratings.read())) as db:
                 global_scoring.attach(db)
+                global_scoring.attach(db, 'quality')
                 result = insights.correlations(db, COLUMNS)
         self.assertEqual(result['ratings'], 7)
         labels = {s['label'] for s in result['stats']}

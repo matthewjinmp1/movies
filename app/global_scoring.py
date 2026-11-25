@@ -30,8 +30,23 @@ NUMERIC += list(enrichment.NUMERIC)
 DEFAULTS['weights'].update({k:0 for k in enrichment.NUMERIC})
 DEFAULTS['fields'].update({k:dict(mode='lower' if v['lower'] else 'higher',scale='fixed',low=0,high=v['maximum'],target=v['maximum']/2,tolerance=v['maximum']/2) for k,v in enrichment.NUMERIC.items()})
 
-def validate(data=None):
-    result=copy.deepcopy(DEFAULTS)
+# Two independent scores share the same settings shape: the Global score and a separate Quality score.
+PROFILES = {
+    'global':dict(path='global_scoring.json',cache='global_scores.sqlite3',alias='global_cache',score='globalScore',rank='globalRank',prefix='g_'),
+    'quality':dict(path='quality_scoring.json',cache='quality_scores.sqlite3',alias='quality_cache',score='qualityScore',rank='qualityRank',prefix='q_'),
+}
+# Quality starts from ratings only; a missing rating counts as average rather than zero.
+QUALITY_DEFAULTS = copy.deepcopy(DEFAULTS)
+QUALITY_DEFAULTS['weights'] = {k:0 for k in LABELS} | {k:w for k,w in dict(averageRating=2,rtCritic=2,rtAudience=1,metacritic=2,metacriticUser=1,letterboxd=2,tmdbRating=1,traktRating=1,ebertRating=1).items() if k in LABELS}
+QUALITY_DEFAULTS['missingScore'] = 50
+
+def profile(kind):
+    if kind not in PROFILES: raise ValueError('Unknown score.')
+    # Paths are resolved on each call so PATH and ROOT can be pointed elsewhere (tests do).
+    return PROFILES[kind] | dict(path=PATH if kind=='global' else ROOT/PROFILES[kind]['path'],cache=ROOT/PROFILES[kind]['cache'])
+
+def validate(data=None, kind='global'):
+    profile(kind);result=copy.deepcopy(QUALITY_DEFAULTS if kind=='quality' else DEFAULTS)
     if data is None: return result
     if isinstance(data,dict) and isinstance(data.get('weights'),dict) and isinstance(data.get('fields'),dict):
         data=copy.deepcopy(data)
@@ -59,12 +74,13 @@ def validate(data=None):
         if v['low']>=v['high']: raise ValueError(f'{LABELS[key]}: low anchor must be below high anchor.')
     return copy.deepcopy(data)
 
-def read():
+def read(kind='global'):
+    path=profile(kind)['path']
     with LOCK:
-        return validate(json.loads(PATH.read_text())) if PATH.exists() else validate()
+        return validate(json.loads(path.read_text()),kind) if path.exists() else validate(None,kind)
 
-def save(data):
-    data=validate(data)
+def save(data, kind='global'):
+    data=validate(data,kind);PATH=profile(kind)['path']
     with LOCK:
         name=None
         try:
@@ -108,12 +124,12 @@ def mapping(key,counts,settings):
         result[value]=max(0,min(100,score))
     return result
 
-def ensure_cache(settings,source=None):
+def ensure_cache(settings,source=None,kind='global'):
     """Build once per settings/snapshot; atomically replace the derived cache."""
     source=source or ROOT/'movies.sqlite3'
-    stamp=source.stat()
-    signature=hashlib.sha256(('rank-mdb-v2'+str(enrichment.ensure().stat().st_mtime_ns)+json.dumps(settings,sort_keys=True)+str((str(source),stamp.st_mtime_ns,stamp.st_size))).encode()).hexdigest()
-    cache=ROOT/'global_scores.sqlite3'
+    stamp=source.stat();P=profile(kind);S,R,G=P['score'],P['rank'],P['prefix']
+    signature=hashlib.sha256(('rank-mdb-v2'+kind+str(enrichment.ensure().stat().st_mtime_ns)+json.dumps(settings,sort_keys=True)+str((str(source),stamp.st_mtime_ns,stamp.st_size))).encode()).hexdigest()
+    cache=P['cache']
     with LOCK:
         if cache.exists():
             with closing(sqlite3.connect(cache)) as db:
@@ -124,7 +140,7 @@ def ensure_cache(settings,source=None):
                 enrichment.attach(src)
                 maps={key:mapping(key,src.execute(f'SELECT {key},COUNT(*) FROM movies GROUP BY {key}').fetchall(),settings) for key in LABELS}
                 dst.execute('CREATE TABLE cache_info(signature TEXT)');dst.execute('INSERT INTO cache_info VALUES (?)',(signature,))
-                dst.execute('CREATE TABLE scores(tconst TEXT PRIMARY KEY, globalScore REAL,'+','.join('g_'+key+' REAL' for key in LABELS)+')')
+                dst.execute(f'CREATE TABLE scores(tconst TEXT PRIMARY KEY, {S} REAL,'+','.join(G+key+' REAL' for key in LABELS)+')')
                 weight=sum(settings['weights'].values())
                 def records():
                     for row in src.execute('SELECT tconst,'+','.join(LABELS)+' FROM movies'):
@@ -132,10 +148,10 @@ def ensure_cache(settings,source=None):
                         overall=round(sum(score*settings['weights'][key] for key,score in zip(LABELS,scores))/weight,1) if weight else None
                         yield (row[0],overall,*scores)
                 dst.executemany('INSERT INTO scores VALUES ('+','.join('?' for _ in range(len(LABELS)+2))+')',records())
-                dst.execute('CREATE INDEX score_order ON scores(globalScore DESC,tconst)')
-                dst.execute('CREATE TABLE ranks AS SELECT tconst, CASE WHEN globalScore IS NOT NULL THEN RANK() OVER (ORDER BY globalScore DESC) END AS globalRank FROM scores')
+                dst.execute(f'CREATE INDEX score_order ON scores({S} DESC,tconst)')
+                dst.execute(f'CREATE TABLE ranks AS SELECT tconst, CASE WHEN {S} IS NOT NULL THEN RANK() OVER (ORDER BY {S} DESC) END AS {R} FROM scores')
                 dst.execute('CREATE UNIQUE INDEX rank_movie ON ranks(tconst)')
-                dst.execute('CREATE INDEX rank_order ON ranks(globalRank,tconst)')
+                dst.execute(f'CREATE INDEX rank_order ON ranks({R},tconst)')
                 # Statistics let SQLite page through the rank indexes instead of sorting every movie.
                 dst.execute('ANALYZE');dst.commit()
             os.replace(name,cache)
@@ -143,19 +159,19 @@ def ensure_cache(settings,source=None):
             if os.path.exists(name): os.unlink(name)
     return cache
 
-def attach(db):
+def attach(db, kind='global'):
     # Hold the lock until the file is attached so settings and scores always agree.
     with LOCK:
-        settings=read();path=ensure_cache(settings)
-        db.execute('ATTACH DATABASE ? AS global_cache',(str(path),))
+        settings=read(kind);path=ensure_cache(settings,kind=kind)
+        db.execute(f"ATTACH DATABASE ? AS {profile(kind)['alias']}",(str(path),))
         return settings
 
 
-def breakdown(row, settings):
+def breakdown(row, settings, kind='global'):
     total=sum(settings['weights'].values())
     result=[]
     for key,label in LABELS.items():
-        value=row[key];score=row.pop('g_'+key);weight=settings['weights'][key]
+        value=row[key];score=row.pop(profile(kind)['prefix']+key);weight=settings['weights'][key]
         raw=utility(key,value,settings) if key=='genres' else value
         if raw is None:
             rule=f"Missing data → configured score {settings['missingScore']:g}."

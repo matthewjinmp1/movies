@@ -32,6 +32,8 @@ ROOT = Path(__file__).resolve().parent
 COLUMNS = [
     ('globalScore','Global score','number'),
     ('globalRank','Global rank','number'),
+    ('qualityScore','Quality score','number'),
+    ('qualityRank','Quality rank','number'),
     ('primaryTitle','Title','text'), ('myRating','My rating','number'), ('predictedRating','Predicted rating','number'), ('filterScore','Filter score','number'), ('originalTitle','Original title','text'),
     ('startYear','Year','number'), ('averageRating','IMDb rating','number'),
     ('numVotes','Votes','number'), ('runtimeMinutes','Runtime (min)','number'),
@@ -71,7 +73,7 @@ def conditions(search, filters):
                 raise ValueError('Invalid not seen filter.')
             clauses.append('tconst NOT IN (SELECT tconst FROM seen_movies)')
             continue
-        if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore','globalRank','myRating','predictedRating'):
+        if not isinstance(f,dict) or f.get('field') not in FIELDS or f.get('field') in ('filterScore','globalScore','globalRank','qualityScore','qualityRank','myRating','predictedRating'):
             raise ValueError('Unknown filter field.')
         key, op, value = f['field'], f.get('op'), f.get('value')
         kind = FIELDS[key]
@@ -150,12 +152,15 @@ def query(params):
     pages = max(1,math.ceil(total/size))
     page = max(1,min(int(params.get('page',['1'])[0]),pages))
     collation = ' COLLATE NOCASE' if FIELDS[sort] in ['text','genre'] else ''
-    order, source = sort, 'movies JOIN global_cache.scores USING(tconst) JOIN global_cache.ranks USING(tconst)'
-    if sort in ('globalScore','globalRank'):
-        # Walking the global ordering index is fast unless it must skip many non-matching movies; sparse matches are cheaper to sort.
+    joins = {k:f'JOIN {k}_cache.scores USING(tconst) JOIN {k}_cache.ranks USING(tconst)' for k in ('global','quality')}
+    order, source = sort, f"movies {joins['global']} {joins['quality']}"
+    ranked = {'globalScore':('global','scores','ranks'),'globalRank':('global','ranks','scores'),'qualityScore':('quality','scores','ranks'),'qualityRank':('quality','ranks','scores')}
+    if sort in ranked:
+        # Walking the score's ordering index is fast unless it must skip many non-matching movies; sparse matches are cheaper to sort.
         if page*size*(library_size((ROOT/'movies.sqlite3').stat().st_mtime_ns)-total) > 100000*max(total,1): order = '+'+sort
-        elif sort == 'globalScore': source = 'global_cache.scores CROSS JOIN movies USING(tconst) JOIN global_cache.ranks USING(tconst)'
-        else: source = 'global_cache.ranks CROSS JOIN movies USING(tconst) JOIN global_cache.scores USING(tconst)'
+        else:
+            kind,first,second = ranked[sort]
+            source = f"{kind}_cache.{first} CROSS JOIN movies USING(tconst) JOIN {kind}_cache.{second} USING(tconst) {joins['quality' if kind=='global' else 'global']}"
     source += ' LEFT JOIN my_ratings USING(tconst) LEFT JOIN personal_cache.predictions USING(tconst)'
     settings=score_settings.validate(json.loads(params.get('scoring',['null'])[0]))
     components = score_components([f for f in filters if f['field'] not in ('notSeen','mdbAvailable')], search, settings)
@@ -165,11 +170,12 @@ def query(params):
     score = 'ROUND(100.0 * (' + ' + '.join(f'score_{i} * {c["weight"]}' for i,c in enumerate(components)) + f') / {weight}, 1)' if weight else 'NULL'
     with closing(connect(saved_ids if saved_view else (), seen_ids, blocked_ids, my_ratings)) as db:
         global_settings=global_scoring.attach(db)
+        quality_settings=global_scoring.attach(db,'quality')
         prediction=personal_model.attach(db)
         if sort == 'predictedRating':
             # Predicted movies sort ahead of unpredicted ones in both directions, so their pages can walk the prediction index.
             if page*size <= db.execute(f'SELECT COUNT(*) FROM personal_cache.predictions CROSS JOIN movies USING(tconst){where}',args).fetchone()[0]:
-                source = 'personal_cache.predictions CROSS JOIN movies USING(tconst) JOIN global_cache.scores USING(tconst) JOIN global_cache.ranks USING(tconst) LEFT JOIN my_ratings USING(tconst)'
+                source = f"personal_cache.predictions CROSS JOIN movies USING(tconst) {joins['global']} {joins['quality']} LEFT JOIN my_ratings USING(tconst)"
             else: order = '+'+sort
         rows = db.execute(f'SELECT *, {score} AS filterScore FROM (SELECT *{extra} FROM {source}{where}) ORDER BY {order}{collation} {direction} NULLS LAST, tconst ASC LIMIT ? OFFSET ?',score_args+args+[size,(page-1)*size]).fetchall()
     result=[]
@@ -179,6 +185,7 @@ def query(params):
         row['blocked'] = row['tconst'] in blocked_ids
         row['seen'] = row['tconst'] in seen_ids
         row['globalBreakdown']=global_scoring.breakdown(row,global_settings)
+        row['qualityBreakdown']=global_scoring.breakdown(row,quality_settings,'quality')
         row['scoreBreakdown']=[dict(label=c['label'],weight=c['weight'],score=round(100*row.pop(f'score_{i}'),1)) for i,c in enumerate(components)]
         for key in enrichment.CATEGORIES: row[key]=json.loads(row[key]) if row[key] else []
         result.append(row)
@@ -261,7 +268,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(payload,dict):raise ValueError('Invalid preset.')
                 return self.send_json(score_presets.change(payload))
             if path == '/api/global-scoring':
-                return self.send_json({'settings':global_scoring.save(payload),'saved':True})
+                kind=parse_qs(urlsplit(self.path).query).get('kind',['global'])[0]
+                return self.send_json({'settings':global_scoring.save(payload,kind),'saved':True})
             if path in ('/api/starred', '/api/seen', '/api/blocked', '/api/ratings'):
                 if not isinstance(payload,dict): raise ValueError('Invalid selection.')
                 movie_id = payload.get('tconst')
@@ -308,10 +316,12 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == '/api/global-presets':
                 return self.send_json(score_presets.read())
             if parsed.path == '/api/global-scoring':
-                return self.send_json({'settings':global_scoring.read(),'defaults':global_scoring.validate()})
+                kind=parse_qs(parsed.query).get('kind',['global'])[0]
+                return self.send_json({'settings':global_scoring.read(kind),'defaults':global_scoring.validate(None,kind)})
             if parsed.path == '/api/rating-insights':
                 with closing(connect(my_ratings=ratings.read())) as db:
                     global_scoring.attach(db)
+                    global_scoring.attach(db,'quality')
                     return self.send_json(rating_insights.correlations(db, COLUMNS))
             if parsed.path == '/api/movies':
                 return self.send_json(query(parse_qs(parsed.query)))

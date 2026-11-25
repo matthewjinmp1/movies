@@ -34,3 +34,5 @@ app/global_presets.json
 
 app/filter_presets.json
 app/filter_history/
+app/movielens/
+app/quality_scoring.json

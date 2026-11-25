@@ -3,7 +3,7 @@ import json
 import math
 
 # Derived, filter-dependent, or duplicate fields would only echo the ratings or each other.
-SKIPPED = {'myRating', 'predictedRating', 'filterScore', 'globalRank', 'endYear'}
+SKIPPED = {'myRating', 'predictedRating', 'filterScore', 'globalRank', 'qualityRank', 'endYear'}
 # Counts and money span orders of magnitude, so Pearson uses their logarithm.
 LOGGED = {'numVotes', 'budget', 'revenue'}
 # Keywords are left out: movies have up to 100 each, so hundreds would be tested and many would correlate by chance.
@@ -55,8 +55,8 @@ def stat(label, group, pairs, logged=False):
 
 
 def correlations(db, columns):
-    """db must have the movies view, global_cache, and my_ratings attached."""
-    rows = [dict(r) for r in db.execute('SELECT * FROM movies JOIN my_ratings USING(tconst) JOIN global_cache.scores USING(tconst)')]
+    """db must have the movies view, global_cache, quality_cache, and my_ratings attached."""
+    rows = [dict(r) for r in db.execute('SELECT * FROM movies JOIN my_ratings USING(tconst) JOIN global_cache.scores USING(tconst) JOIN quality_cache.scores USING(tconst)')]
     result = []
     for key, label, kind in columns:
         if kind == 'number' and key not in SKIPPED:
@@ -81,5 +81,5 @@ def correlations(db, columns):
     q = 1.0
     for i in range(len(tested)-1, -1, -1):
         q = min(q, tested[i]['p']*len(tested)/(i+1))
-        tested[i]['q'] = q
+        tested[i]['q'] = max(q, tested[i]['p'])  # floating-point rounding can dip just below p
     return {'ratings':len(rows), 'tested':len(tested), 'stats':result}
